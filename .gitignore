@@ -1,0 +1,21 @@
+# Dependencies, package-manager caches, and build output
+node_modules/
+.npm/
+.svelte-kit/
+build/
+
+# Local Firebase/Vercel state and logs
+.firebase/
+.vercel/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Local environment values
+.env
+.env.*
+!.env.example
+
+# Operating-system and editor files
+.DS_Store
+*.local

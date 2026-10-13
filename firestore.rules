@@ -1,0 +1,94 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // This narrow bootstrap policy exists only so the approved first-run flow
+    // can safely create and discover a Vault. Step 5 replaces it with the full,
+    // emulator-tested policy for clients, payments, expenses, edits, and deletes.
+
+    function signedInWithVerifiedGoogleEmail() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function isValidMember(member) {
+      return member is map
+        && member.keys().hasAll(['name', 'email'])
+        && member.keys().hasOnly(['name', 'email'])
+        && member.name is string
+        && member.name.size() > 0
+        && member.name.size() <= 80
+        && member.email is string
+        && member.email.size() > 2
+        && member.email.size() <= 320;
+    }
+
+    function hasValidMembers(members) {
+      return members is map
+        && members.keys().hasAll(['a', 'b'])
+        && members.keys().hasOnly(['a', 'b'])
+        && isValidMember(members.a)
+        && isValidMember(members.b)
+        && members.a.email != members.b.email;
+    }
+
+    function isValidPartnerTotals(partnerTotals) {
+      return partnerTotals is map
+        && partnerTotals.keys().hasAll(['received', 'spent'])
+        && partnerTotals.keys().hasOnly(['received', 'spent'])
+        && partnerTotals.received is int
+        && partnerTotals.received == 0
+        && partnerTotals.spent is int
+        && partnerTotals.spent == 0;
+    }
+
+    function hasZeroInitialTotals(totals) {
+      return totals is map
+        && totals.keys().hasAll(['earned', 'spent', 'a', 'b'])
+        && totals.keys().hasOnly(['earned', 'spent', 'a', 'b'])
+        && totals.earned is int
+        && totals.earned == 0
+        && totals.spent is int
+        && totals.spent == 0
+        && isValidPartnerTotals(totals.a)
+        && isValidPartnerTotals(totals.b);
+    }
+
+    function isValidInitialVault() {
+      return request.resource.data.keys().hasAll(['name', 'createdAt', 'members', 'totals'])
+        && request.resource.data.keys().hasOnly(['name', 'createdAt', 'members', 'totals'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.createdAt == request.time
+        && hasValidMembers(request.resource.data.members)
+        && hasZeroInitialTotals(request.resource.data.totals);
+    }
+
+    function isVaultMember(vault) {
+      return signedInWithVerifiedGoogleEmail()
+        && (
+          vault.members.a.email == request.auth.token.email
+          || vault.members.b.email == request.auth.token.email
+        );
+    }
+
+    match /vaults/{vaultId} {
+      allow create: if signedInWithVerifiedGoogleEmail()
+        && isValidInitialVault()
+        && isVaultMember(request.resource.data);
+
+      allow get, list: if isVaultMember(resource.data);
+
+      // Settings and all aggregate updates wait for the full Step 5 rule set.
+      allow update, delete: if false;
+    }
+
+    match /vaults/{vaultId}/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
