@@ -8,10 +8,13 @@ const config = {
 		adapter: adapter({
 			pages: 'build',
 			assets: 'build',
-			fallback: 'index.html',
+			fallback: '200.html',
 			precompress: false,
 			strict: true
-		})
+		}),
+		serviceWorker: {
+			register: false
+		}
 	}
 };
 

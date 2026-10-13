@@ -60,7 +60,11 @@
 			return;
 		}
 
-		if (ownEmail !== input.members.a.email && ownEmail !== input.members.b.email) {
+		const ownsPartner = [input.members.a.email, input.members.b.email].some(
+			(email) => email.toLocaleLowerCase() === ownEmail.toLocaleLowerCase()
+		);
+
+		if (!ownsPartner) {
 			validationError = 'Your signed-in Google email must be listed as Partner A or Partner B.';
 			return;
 		}

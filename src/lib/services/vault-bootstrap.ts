@@ -6,6 +6,7 @@ import {
 	query,
 	serverTimestamp,
 	setDoc,
+	Timestamp,
 	where,
 	type DocumentData,
 	type QueryDocumentSnapshot,
@@ -14,6 +15,7 @@ import {
 
 import { getFirebaseClient } from '$lib/firebase/client';
 import type { VaultMember, VaultSetupInput, VaultSummary, VaultTotals } from '$lib/types/vault';
+import { isValidPaise } from '$lib/utils/money';
 
 export interface VaultMembershipResult {
 	vaults: VaultSummary[];
@@ -40,6 +42,33 @@ function toVaultMember(value: unknown): VaultMember {
 	};
 }
 
+function asDate(value: unknown): Date | null {
+	return value instanceof Timestamp ? value.toDate() : null;
+}
+
+function toPaise(value: unknown): number {
+	return isValidPaise(value) ? value : 0;
+}
+
+function toVaultTotals(value: unknown): VaultTotals {
+	const totals = value as Partial<VaultTotals> | undefined;
+	const partnerA = totals?.a as Partial<VaultTotals['a']> | undefined;
+	const partnerB = totals?.b as Partial<VaultTotals['b']> | undefined;
+
+	return {
+		earned: toPaise(totals?.earned),
+		spent: toPaise(totals?.spent),
+		a: {
+			received: toPaise(partnerA?.received),
+			spent: toPaise(partnerA?.spent)
+		},
+		b: {
+			received: toPaise(partnerB?.received),
+			spent: toPaise(partnerB?.spent)
+		}
+	};
+}
+
 function toVaultSummary(snapshot: QueryDocumentSnapshot<DocumentData>): VaultSummary {
 	const data = snapshot.data();
 	const members = data.members as { a?: unknown; b?: unknown } | undefined;
@@ -51,6 +80,10 @@ function toVaultSummary(snapshot: QueryDocumentSnapshot<DocumentData>): VaultSum
 			a: toVaultMember(members?.a),
 			b: toVaultMember(members?.b)
 		},
+		totals: toVaultTotals(data.totals),
+		lastMutationId: typeof data.lastMutationId === 'string' ? data.lastMutationId : null,
+		createdAt: asDate(data.createdAt),
+		updatedAt: asDate(data.updatedAt),
 		fromCache: snapshot.metadata.fromCache,
 		pendingWrites: snapshot.metadata.hasPendingWrites
 	};
@@ -71,10 +104,7 @@ function initialTotals(): VaultTotals {
 	};
 }
 
-/**
- * Creates a vault with zero paise totals. Payments and expenses are deliberately
- * not handled here; their batched write data layer is implemented in Step 3.
- */
+/** Creates a vault with zero paise totals. */
 export async function createInitialVault(input: VaultSetupInput): Promise<string> {
 	const { auth, db } = getFirebaseClient();
 	const signedInEmail = auth.currentUser?.email?.trim();
@@ -100,9 +130,17 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 		throw new Error('Partner A and Partner B must use different Google emails.');
 	}
 
-	if (signedInEmail !== members.a.email && signedInEmail !== members.b.email) {
+	const ownPartner = [members.a, members.b].find(
+		(member) => member.email.toLocaleLowerCase() === signedInEmail.toLocaleLowerCase()
+	);
+
+	if (!ownPartner) {
 		throw new Error('Your signed-in Google email must be entered as Partner A or Partner B.');
 	}
+
+	// Preserve Firebase Auth's exact email casing for the signed-in member because
+	// Firestore rules compare it directly to request.auth.token.email.
+	ownPartner.email = signedInEmail;
 
 	const vaultRef = doc(collection(db, 'vaults'));
 
@@ -178,7 +216,7 @@ export function vaultErrorMessage(error: unknown): string {
 
 	switch (code) {
 		case 'permission-denied':
-			return 'Vault access was denied. Deploy the bootstrap Firestore rules before testing setup.';
+			return 'Vault access was denied. Deploy the current Firestore rules before testing setup.';
 		case 'unavailable':
 			return 'Firestore is unavailable right now. Check your connection and try again.';
 		case 'failed-precondition':

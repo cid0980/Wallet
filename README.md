@@ -1,101 +1,186 @@
 # Vault
 
-A private, shared money tracker for two partners who work on client projects together.
+A private shared money tracker for two partners who work on client projects together. Vault is a static, mobile-first PWA with Google sign-in, a two-person Firestore Vault, integer-paise accounting, an audit history, and offline-capable browser caching.
 
-## Current status
+## Delivery status
 
-- ✅ Step 1 — static SvelteKit SPA, Vercel static-host configuration, Firebase emulator configuration
-- ✅ Step 2 — Google redirect sign-in, persistent Firestore cache, membership lookup, and first-run shared-vault creation
-- ⏳ Step 3 — typed money data layer: paise conversion, write batches, increments, payment/expense edits and deletes
-- ⏳ Step 4 — dashboard, clients, payments, expenses, history, settings, and bottom navigation
-- ⏳ Step 5 — full emulator-tested Firestore rules
-- ⏳ Step 6 — PWA manifest, service worker, installation, and update prompt
-- ⏳ Step 7 — private GitHub repository, Vercel GitHub Actions deployment, and production verification
+- ✅ Step 1 — static SvelteKit SPA, Vercel static-host configuration, Firebase Emulator configuration
+- ✅ Step 2 — Google redirect sign-in, persistent Firestore cache, member discovery, first-run Vault creation
+- ✅ Step 3 — integer-paise money utilities, typed documents, atomic payment/expense batches and aggregate increments
+- ✅ Step 4 — dashboard, clients, payments, expenses, immutable history, settings, and mobile navigation
+- ✅ Step 5 — full Firestore rules plus emulator-backed rule tests
+- ✅ Step 6 — installable PWA manifest, service worker, offline app shell, and update prompt
+- ✅ Step 7 — GitHub Actions verification and Vercel prebuilt-production deployment workflow
+- ⏳ Production activation — requires the account owner to configure Vercel secrets/environment values and authorize the final Vercel domain in Firebase Auth
 
 ## Technology baseline
 
 - Node.js `24.12.0` or newer within Node 24
-- SvelteKit `2.70.3` with Svelte 5 and TypeScript
-- `@sveltejs/adapter-static`
-- Client-only SPA (`ssr = false`) with `index.html` fallback
-- Firebase JS SDK: Auth and Firestore only
+- SvelteKit `2.70.3`, Svelte 5, TypeScript, and `@sveltejs/adapter-static`
+- Firebase JS SDK `13.0.0`: Authentication and Cloud Firestore only
+- `@vite-pwa/sveltekit` for the PWA app shell and update prompt
 - Vercel static hosting only; no Vercel Functions
+- GitHub Actions for verification and Vercel deployment
 
-## Local setup
+Vault does **not** use Firebase Hosting, Cloud Functions, Cloud Storage, Firebase Analytics, a server database, or any paid Firebase product.
 
-1. Install Node using the committed version file:
+## Repository safety
 
-   ```bash
-   nvm install
-   nvm use
-   node --version
-   ```
+The repository must never contain:
 
-   The expected Node version is at least `v24.12.0` and below Node 25.
+- `.env.local`
+- GitHub personal-access tokens
+- Vercel tokens
+- Firebase service-account JSON or private keys
+- SSH deploy keys
+- Firebase emulator data, logs, `node_modules`, or build output
 
-2. Install the exact locked dependencies:
+The public Firebase web configuration belongs only in ignored `.env.local` locally and in Vercel Production environment variables for deployment.
 
-   ```bash
-   npm ci
-   ```
-
-3. Run the app:
-
-   ```bash
-   npm run dev
-   ```
-
-4. Verify before committing:
-
-   ```bash
-   npm run verify
-   ```
-
-   `npm run verify` runs type checking and creates the static production output in `build/`.
-
-## Firebase configuration
-
-Vault uses Firebase only for Google Authentication, Cloud Firestore, Firestore Security Rules, and the local Emulator Suite. It does **not** use Firebase Hosting, Cloud Functions, Cloud Storage, or any paid Firebase product.
-
-The active Firebase project is `valet-07`. Its public web configuration belongs in ignored `.env.local`; do not commit that file.
-
-Do not put service-account JSON, private keys, Vercel tokens, or GitHub tokens in this repository.
-
-### Required Firebase Console settings
-
-1. **Authentication → Sign-in method:** enable **Google**.
-2. **Authentication → Settings → Authorized domains:** add `localhost` for local development. Add the final Vercel production domain during Step 7.
-3. **Firestore Database:** create the default database in **Production mode**. For partners based near Hosūr, `asia-south1` (Mumbai) is the expected low-latency regional choice.
-
-### Bootstrap rules deployment
-
-The committed Firestore rules are a deliberately narrow bootstrap policy. They permit only verified Google users to create a structurally valid zero-balance vault containing their own email, and let only the two stored members read that vault. Payments, expenses, updates, deletes, and every subcollection remain denied until Step 5.
-
-Before testing first-run creation against production Firebase, authenticate locally and deploy those bootstrap rules:
+## Local development
 
 ```bash
-npx firebase-tools@15.33.0 login
-npm run firestore:rules:deploy
+nvm install
+nvm use
+npm ci
+npm run dev
 ```
 
-## Local Firebase emulators
+Before any commit or deployment, run:
 
-After dependencies are installed, start only Authentication and Firestore emulators with:
+```bash
+npm run verify
+```
+
+`npm run verify` performs all three checks:
+
+1. `npm run check` — Svelte and TypeScript diagnostics
+2. `npm run test:rules` — Firestore Emulator security-rule tests
+3. `npm run build` — static production build plus PWA service-worker generation
+
+### Java requirement
+
+The current Firebase CLI requires **Java 21 or newer** for the local Firestore Emulator Suite.
 
 ```bash
 npm run emulators
 ```
 
-This uses the local-only project ID `vault-local` and opens the Emulator UI on port 4000. No production Firebase data is touched by that command.
+starts only local Authentication and Firestore emulators using the non-production project ID `vault-local`. It does not modify production Firebase data.
 
-**Java 21 or newer is required.** During Step 2 verification, current `firebase-tools@15.33.0` rejected Java 11 and successfully started the Firestore Emulator with Java 21. Install a JDK/JRE 21+ before running emulator commands locally.
+## Data model and money safety
 
-## Offline-data safety
+All money is stored as a non-negative integer count of **paise**. For example, `₹1,250.50` is stored as `125050`. Vault never uses floating-point arithmetic for balances.
 
-Vault initializes Firestore with a persistent multi-tab IndexedDB cache. This makes live listeners and future batched writes available offline and lets them synchronize later. It also means cached Vault information can remain on the device after the browser closes. Only sign in on devices you trust, and use sign out when necessary.
+### Firestore hierarchy
 
-## Vercel static deployment boundary
+```text
+/vaults/{vaultId}
+  /clients/{clientId}
+  /payments/{paymentId}
+  /expenses/{expenseId}
+  /mutations/{mutationId}
+```
 
-`vercel.json` deliberately selects Vercel's **Other** framework preset and serves the static `build/` directory. Its catch-all rewrite routes deep links to `index.html`, allowing SvelteKit's client router to handle them.
+- The root Vault document holds aggregate totals.
+- Payments and expenses are linked to active clients where appropriate.
+- Each payment or expense change atomically writes the changed record, an immutable mutation/audit document, and aggregate totals.
+- Security rules use Firestore `getAfter()` and `existsAfter()` checks so a record, its mutation, and the totals cannot be written separately.
+- Clients are archived rather than deleted so historical money records remain meaningful.
 
-GitHub Actions deployment, Vercel project linking, Vercel secrets, and Firebase Auth production-domain setup are deferred to Step 7 after the app works locally.
+## Firestore rules
+
+`firestore.rules` is now the full application rule set. It replaces the earlier bootstrap policy and permits:
+
+- Valid Google-authenticated members to read their own Vault data
+- Both members to create and edit clients
+- Both members to create, edit, and delete payments or expenses only through valid atomic batches
+- Read-only immutable history mutations
+
+It still denies:
+
+- Non-member access
+- Non-Google authentication providers
+- Direct aggregate-total manipulation
+- Standalone money-record writes
+- Mutation edits/deletes
+- Client deletion
+- Vault deletion and direct settings edits
+
+Run the included tests with:
+
+```bash
+npm run test:rules
+```
+
+The test suite covers initial Vault creation, member/non-member boundaries, client access, valid payment batches, aggregate manipulation attempts, malformed deltas, payment edits/deletes, and immutable history.
+
+## PWA and offline behavior
+
+Vault provides:
+
+- `manifest.webmanifest`
+- Android maskable and standard app icons
+- A generated service worker that precaches the installable static application shell
+- An in-app update prompt
+- Firestore persistent multi-tab IndexedDB cache for Vault data
+
+The service worker deliberately does **not** cache Firestore API responses. Firestore itself manages encrypted browser-local data caching and synchronization. Use Vault only on devices you trust, and sign out on shared devices.
+
+## Vercel deployment through GitHub Actions
+
+The workflow is at:
+
+```text
+.github/workflows/deploy-vercel.yml
+```
+
+On a `main` push it always verifies the application. Production deployment is safely skipped until all three GitHub repository secrets exist:
+
+```text
+VERCEL_TOKEN
+VERCEL_ORG_ID
+VERCEL_PROJECT_ID
+```
+
+The workflow follows Vercel's prebuilt-deployment sequence:
+
+1. `vercel pull --environment=production`
+2. `vercel build --prod`
+3. `vercel deploy --prebuilt --prod`
+
+### One-time phone-friendly production setup
+
+Complete these in a browser directly in Vercel and GitHub. Do not paste the values into chat or commit them.
+
+1. In **Vercel**, create or link a project for `cid0980/Wallet` using the **Other** framework preset. The committed `vercel.json` builds `build/` and sends SPA deep links to `200.html`.
+2. In **Vercel → Project Settings → Environment Variables**, add these exact Production variables using the values from your local Firebase web configuration:
+
+   ```text
+   VITE_FIREBASE_API_KEY
+   VITE_FIREBASE_AUTH_DOMAIN
+   VITE_FIREBASE_PROJECT_ID
+   VITE_FIREBASE_APP_ID
+   VITE_FIREBASE_MESSAGING_SENDER_ID
+   ```
+
+3. In **Vercel → Account/Team Settings**, create a deployment token. Keep it private.
+4. In **Vercel → Project Settings → General**, copy the Project ID. Copy the Team/Account ID from your Vercel settings.
+5. In **GitHub → cid0980/Wallet → Settings → Secrets and variables → Actions**, create these three repository secrets directly:
+
+   ```text
+   VERCEL_TOKEN
+   VERCEL_ORG_ID
+   VERCEL_PROJECT_ID
+   ```
+
+6. Run the **Verify and deploy Vault** workflow from GitHub Actions, or push to `main` after the secrets are configured.
+7. After Vercel shows the final `*.vercel.app` domain, open **Firebase Console → Authentication → Settings → Authorized domains** and add that domain. Firebase Google sign-in will then work on the production site.
+
+## Firebase Console requirements
+
+- Enable **Google** in Authentication → Sign-in method.
+- Create Firestore in **Production mode**. For partners near Hosūr, `asia-south1` (Mumbai) is the expected low-latency regional choice.
+- Add `localhost` for local development.
+- Add the final Vercel domain after the first production deployment.
+- Copy the complete current `firestore.rules` file into Firestore Database → Rules and publish it before recording payments or expenses in production.

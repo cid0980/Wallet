@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
+	import PwaUpdatePrompt from '$lib/components/app/PwaUpdatePrompt.svelte';
+	import VaultWorkspace from '$lib/components/app/VaultWorkspace.svelte';
 	import GoogleLogin from '$lib/components/auth/GoogleLogin.svelte';
 	import VaultSetupForm from '$lib/components/setup/VaultSetupForm.svelte';
 	import { createInitialVault, vaultErrorMessage } from '$lib/services/vault-bootstrap';
 	import { authState, signInWithGoogle, signOutOfVault, startAuthObserver, stopAuthObserver } from '$lib/stores/auth';
+	import { clearVaultData, observeVaultData, vaultData } from '$lib/stores/vault-data';
 	import {
 		clearVaultSession,
 		observeVaultSession,
@@ -13,6 +16,7 @@
 	import type { VaultSetupInput } from '$lib/types/vault';
 
 	let observedEmail: string | null = null;
+	let observedVaultId: string | null = null;
 	let creatingVault = false;
 	let signingOut = false;
 	let setupError: string | null = null;
@@ -21,6 +25,7 @@
 		void startAuthObserver();
 
 		return () => {
+			clearVaultData();
 			clearVaultSession();
 			stopAuthObserver();
 		};
@@ -36,7 +41,21 @@
 
 	$: if (($authState.status !== 'signed-in' || !currentEmail) && observedEmail !== null) {
 		observedEmail = null;
+		observedVaultId = null;
+		clearVaultData();
 		clearVaultSession();
+	}
+
+	$: currentVaultId = $vaultSession.status === 'ready' ? $vaultSession.vault?.id ?? null : null;
+
+	$: if (currentVaultId && observedVaultId !== currentVaultId) {
+		observedVaultId = currentVaultId;
+		observeVaultData(currentVaultId);
+	}
+
+	$: if (!currentVaultId && observedVaultId !== null) {
+		observedVaultId = null;
+		clearVaultData();
 	}
 
 	async function handleCreateVault(input: VaultSetupInput): Promise<void> {
@@ -58,6 +77,8 @@
 
 		try {
 			await signOutOfVault();
+			observedVaultId = null;
+			clearVaultData();
 			clearVaultSession();
 		} catch (error) {
 			setupError = error instanceof Error ? error.message : 'Could not sign out. Please try again.';
@@ -71,6 +92,12 @@
 			observeVaultSession(currentEmail, true);
 		}
 	}
+
+	function retryVaultData(): void {
+		if (currentVaultId) {
+			observeVaultData(currentVaultId, true);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -79,84 +106,73 @@
 		name="description"
 		content="A private shared tracker for client payments, spending, and project balances."
 	/>
+	<meta name="theme-color" content="#08743b" />
 </svelte:head>
 
-<main>
-	{#if $authState.status === 'loading'}
-		<section class="loading-card" aria-live="polite">
-			<span class="spinner" aria-hidden="true"></span>
-			<p>Checking your secure Vault session…</p>
-		</section>
-	{:else if $authState.status === 'signed-out' || $authState.status === 'redirecting' || $authState.status === 'error'}
-		<GoogleLogin
-			busy={$authState.status === 'redirecting'}
-			error={$authState.error}
-			onSignIn={signInWithGoogle}
-		/>
-	{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}
-		{#if $vaultSession.status === 'idle' || $vaultSession.status === 'loading'}
+{#if $authState.status === 'signed-in' && $authState.user && currentEmail && $vaultSession.status === 'ready' && $vaultSession.vault && $vaultData.status === 'ready'}
+	<VaultWorkspace vault={$vaultSession.vault} user={$authState.user} onSignOut={handleSignOut} />
+{:else}
+	<main class="gate">
+		{#if $authState.status === 'loading'}
 			<section class="loading-card" aria-live="polite">
 				<span class="spinner" aria-hidden="true"></span>
-				<p>Finding your shared Vault…</p>
+				<p>Checking your secure Vault session…</p>
 			</section>
-		{:else if $vaultSession.status === 'no-vault'}
-			<VaultSetupForm
-				user={$authState.user}
-				busy={creatingVault || signingOut}
-				error={setupError}
-				onCreate={handleCreateVault}
-				onSignOut={handleSignOut}
+		{:else if $authState.status === 'signed-out' || $authState.status === 'redirecting' || $authState.status === 'error'}
+			<GoogleLogin
+				busy={$authState.status === 'redirecting'}
+				error={$authState.error}
+				onSignIn={signInWithGoogle}
 			/>
-		{:else if $vaultSession.status === 'ready' && $vaultSession.vault}
-			<section aria-labelledby="connected-title" class="connected-card">
-				<div class="success-mark" aria-hidden="true">✓</div>
-				<p class="eyebrow">VAULT CONNECTED</p>
-				<h1 id="connected-title">{$vaultSession.vault.name}</h1>
-				<p class="intro">
-					You are signed in as {$authState.user.email}. The money dashboard and records screens are the
-					next build step.
-				</p>
-
-				<dl>
-					<div>
-						<dt>Partner A</dt>
-						<dd>{$vaultSession.vault.members.a.name}</dd>
+		{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}
+			{#if $vaultSession.status === 'idle' || $vaultSession.status === 'loading'}
+				<section class="loading-card" aria-live="polite">
+					<span class="spinner" aria-hidden="true"></span>
+					<p>Finding your shared Vault…</p>
+				</section>
+			{:else if $vaultSession.status === 'no-vault'}
+				<VaultSetupForm
+					user={$authState.user}
+					busy={creatingVault || signingOut}
+					error={setupError}
+					onCreate={handleCreateVault}
+					onSignOut={handleSignOut}
+				/>
+			{:else if $vaultSession.status === 'error'}
+				<section aria-labelledby="access-title" class="error-card">
+					<p class="eyebrow">VAULT ACCESS</p>
+					<h1 id="access-title">We could not open your Vault.</h1>
+					<p>{$vaultSession.error ?? 'Please try again.'}</p>
+					<div class="actions">
+						<button class="primary" type="button" onclick={retryVaultLookup}>Try again</button>
+						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+							Use another account
+						</button>
 					</div>
-					<div>
-						<dt>Partner B</dt>
-						<dd>{$vaultSession.vault.members.b.name}</dd>
+				</section>
+			{:else if $vaultSession.status === 'ready' && $vaultSession.vault && ($vaultData.status === 'loading' || $vaultData.status === 'idle')}
+				<section class="loading-card" aria-live="polite">
+					<span class="spinner" aria-hidden="true"></span>
+					<p>Loading your shared records…</p>
+				</section>
+			{:else if $vaultData.status === 'error'}
+				<section aria-labelledby="data-title" class="error-card">
+					<p class="eyebrow">VAULT DATA</p>
+					<h1 id="data-title">We could not load your records.</h1>
+					<p>{$vaultData.error ?? 'Please try again.'}</p>
+					<div class="actions">
+						<button class="primary" type="button" onclick={retryVaultData}>Try again</button>
+						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+							Sign out
+						</button>
 					</div>
-				</dl>
-
-				{#if $vaultSession.vaultCount > 1}
-					<p class="notice">
-						More than one Vault matched this account. Vault currently uses the first available membership.
-					</p>
-				{/if}
-
-				{#if $vaultSession.fromCache}
-					<p class="cache-note">Showing locally cached Vault information. Sync resumes when you reconnect.</p>
-				{/if}
-
-				<button class="text-button" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
-					{signingOut ? 'Signing out…' : 'Sign out'}
-				</button>
-			</section>
-		{:else}
-			<section aria-labelledby="access-title" class="error-card">
-				<p class="eyebrow">VAULT ACCESS</p>
-				<h1 id="access-title">We could not open your Vault.</h1>
-				<p>{$vaultSession.error ?? 'Please try again.'}</p>
-				<div class="actions">
-					<button class="primary" type="button" onclick={retryVaultLookup}>Try again</button>
-					<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
-						Use another account
-					</button>
-				</div>
-			</section>
+				</section>
+			{/if}
 		{/if}
-	{/if}
-</main>
+	</main>
+{/if}
+
+<PwaUpdatePrompt />
 
 <style>
 	:global(*) {
@@ -179,23 +195,22 @@
 	}
 
 	:global(body) {
-		margin: 0;
 		min-width: 320px;
-	}
-
-	main {
-		display: grid;
-		min-height: 100dvh;
-		place-items: center;
-		padding: 24px;
+		margin: 0;
 		background:
 			radial-gradient(circle at 8% 0%, rgb(46 174 101 / 14%), transparent 31rem),
 			radial-gradient(circle at 100% 100%, rgb(16 108 58 / 8%), transparent 28rem),
 			var(--background);
 	}
 
+	.gate {
+		display: grid;
+		min-height: 100dvh;
+		place-items: center;
+		padding: 24px;
+	}
+
 	.loading-card,
-	.connected-card,
 	.error-card {
 		width: min(100%, 31rem);
 		padding: 30px 24px;
@@ -226,19 +241,6 @@
 		animation: spin 850ms linear infinite;
 	}
 
-	.success-mark {
-		display: grid;
-		width: 42px;
-		height: 42px;
-		place-items: center;
-		margin-bottom: 18px;
-		border-radius: 50%;
-		background: #dff6e8;
-		color: #08743b;
-		font-size: 1.25rem;
-		font-weight: 850;
-	}
-
 	.eyebrow {
 		margin: 0 0 10px;
 		color: var(--green);
@@ -255,58 +257,18 @@
 		letter-spacing: -0.04em;
 	}
 
-	.intro,
 	.error-card > p:not(.eyebrow) {
 		margin: 14px 0 22px;
 		color: var(--muted);
 		line-height: 1.55;
 	}
 
-	dl {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
-		margin: 0 0 20px;
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
 	}
 
-	dl div {
-		padding: 13px;
-		border: 1px solid var(--border);
-		border-radius: 14px;
-	}
-
-	dt {
-		margin-bottom: 4px;
-		color: var(--muted);
-		font-size: 0.72rem;
-		font-weight: 720;
-	}
-
-	dd {
-		margin: 0;
-		color: var(--text);
-		font-size: 0.92rem;
-		font-weight: 780;
-		word-break: break-word;
-	}
-
-	.notice,
-	.cache-note {
-		margin: 0 0 14px;
-		padding: 11px 12px;
-		border-radius: 12px;
-		background: #f6f0dc;
-		color: #735d19;
-		font-size: 0.82rem;
-		line-height: 1.45;
-	}
-
-	.cache-note {
-		background: #eaf4ed;
-		color: #315e40;
-	}
-
-	.text-button,
 	.primary,
 	.secondary {
 		min-height: 46px;
@@ -314,13 +276,6 @@
 		font: inherit;
 		font-weight: 780;
 		cursor: pointer;
-	}
-
-	.text-button {
-		padding: 0;
-		border: 0;
-		background: transparent;
-		color: var(--green);
 	}
 
 	.primary {
@@ -337,24 +292,16 @@
 		color: var(--text);
 	}
 
-	.text-button:disabled,
-	.primary:disabled,
-	.secondary:disabled {
-		cursor: wait;
-		opacity: 0.65;
-	}
-
-	.text-button:focus-visible,
 	.primary:focus-visible,
 	.secondary:focus-visible {
 		outline: 3px solid rgb(31 158 88 / 36%);
 		outline-offset: 3px;
 	}
 
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 10px;
+	.primary:disabled,
+	.secondary:disabled {
+		cursor: wait;
+		opacity: 0.65;
 	}
 
 	@keyframes spin {
@@ -377,7 +324,6 @@
 		}
 
 		.loading-card,
-		.connected-card,
 		.error-card {
 			box-shadow: 0 24px 60px rgb(0 0 0 / 32%);
 		}
@@ -385,21 +331,6 @@
 		.spinner {
 			border-color: #294936;
 			border-top-color: #64d38e;
-		}
-
-		.success-mark {
-			background: #173d25;
-			color: #74e39b;
-		}
-
-		.notice {
-			background: #3c3218;
-			color: #f3da80;
-		}
-
-		.cache-note {
-			background: #183a25;
-			color: #a5d8b4;
 		}
 	}
 </style>

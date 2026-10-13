@@ -2,9 +2,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // This narrow bootstrap policy exists only so the approved first-run flow
-    // can safely create and discover a Vault. Step 5 replaces it with the full,
-    // emulator-tested policy for clients, payments, expenses, edits, and deletes.
+    // Vault is a two-person, Google-authenticated ledger. Money records are
+    // changed only as a three-document atomic batch:
+    //   1. payment or expense record
+    //   2. immutable mutation/audit record
+    //   3. vault aggregate totals
+    // getAfter()/existsAfter() make the three writes inseparable.
 
     function signedInWithVerifiedGoogleEmail() {
       return request.auth != null
@@ -13,16 +16,24 @@ service cloud.firestore {
         && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
 
+    function authEmail() {
+      return request.auth.token.email;
+    }
+
+    function isValidText(value, maximum) {
+      return value is string && value.size() <= maximum;
+    }
+
+    function isValidNonEmptyText(value, maximum) {
+      return value is string && value.size() > 0 && value.size() <= maximum;
+    }
+
     function isValidMember(member) {
       return member is map
         && member.keys().hasAll(['name', 'email'])
         && member.keys().hasOnly(['name', 'email'])
-        && member.name is string
-        && member.name.size() > 0
-        && member.name.size() <= 80
-        && member.email is string
-        && member.email.size() > 2
-        && member.email.size() <= 320;
+        && isValidNonEmptyText(member.name, 80)
+        && isValidNonEmptyText(member.email, 320);
     }
 
     function hasValidMembers(members) {
@@ -39,51 +50,510 @@ service cloud.firestore {
         && partnerTotals.keys().hasAll(['received', 'spent'])
         && partnerTotals.keys().hasOnly(['received', 'spent'])
         && partnerTotals.received is int
-        && partnerTotals.received == 0
+        && partnerTotals.received >= 0
         && partnerTotals.spent is int
-        && partnerTotals.spent == 0;
+        && partnerTotals.spent >= 0;
     }
 
-    function hasZeroInitialTotals(totals) {
+    function hasValidTotals(totals) {
       return totals is map
         && totals.keys().hasAll(['earned', 'spent', 'a', 'b'])
         && totals.keys().hasOnly(['earned', 'spent', 'a', 'b'])
         && totals.earned is int
-        && totals.earned == 0
+        && totals.earned >= 0
         && totals.spent is int
-        && totals.spent == 0
+        && totals.spent >= 0
         && isValidPartnerTotals(totals.a)
         && isValidPartnerTotals(totals.b);
+    }
+
+    function hasZeroInitialTotals(totals) {
+      return hasValidTotals(totals)
+        && totals.earned == 0
+        && totals.spent == 0
+        && totals.a.received == 0
+        && totals.a.spent == 0
+        && totals.b.received == 0
+        && totals.b.spent == 0;
     }
 
     function isValidInitialVault() {
       return request.resource.data.keys().hasAll(['name', 'createdAt', 'members', 'totals'])
         && request.resource.data.keys().hasOnly(['name', 'createdAt', 'members', 'totals'])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 80
+        && isValidNonEmptyText(request.resource.data.name, 80)
         && request.resource.data.createdAt is timestamp
         && request.resource.data.createdAt == request.time
         && hasValidMembers(request.resource.data.members)
         && hasZeroInitialTotals(request.resource.data.totals);
     }
 
-    function isVaultMember(vault) {
+    function isVaultMemberData(vault) {
+      // Map.get defaults avoid undefined-property evaluation for collection
+      // queries, whose candidate documents are not schema-narrowed yet.
       return signedInWithVerifiedGoogleEmail()
+        && vault is map
         && (
-          vault.members.a.email == request.auth.token.email
-          || vault.members.b.email == request.auth.token.email
+          vault.get('members', {}).get('a', {}).get('email', '') == authEmail()
+          || vault.get('members', {}).get('b', {}).get('email', '') == authEmail()
+        );
+    }
+
+    function isVaultMember(vaultId) {
+      return exists(/databases/$(database)/documents/vaults/$(vaultId))
+        && isVaultMemberData(get(/databases/$(database)/documents/vaults/$(vaultId)).data);
+    }
+
+    function isValidDateKey(value) {
+      return value is string
+        && value.size() == 10
+        && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidClient(client) {
+      return client is map
+        && client.keys().hasAll([
+          'name', 'contact', 'notes', 'isArchived',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && client.keys().hasOnly([
+          'name', 'contact', 'notes', 'isArchived',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && isValidNonEmptyText(client.name, 120)
+        && isValidText(client.contact, 320)
+        && isValidText(client.notes, 1000)
+        && client.isArchived is bool
+        && client.createdAt is timestamp
+        && client.updatedAt is timestamp
+        && isValidNonEmptyText(client.createdBy, 320)
+        && isValidNonEmptyText(client.updatedBy, 320);
+    }
+
+    function isValidPayment(payment) {
+      return payment is map
+        && payment.keys().hasAll([
+          'clientId', 'clientName', 'amountPaise', 'partner', 'occurredOn', 'note',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lastMutationId'
+        ])
+        && payment.keys().hasOnly([
+          'clientId', 'clientName', 'amountPaise', 'partner', 'occurredOn', 'note',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lastMutationId'
+        ])
+        && isValidNonEmptyText(payment.clientId, 160)
+        && isValidNonEmptyText(payment.clientName, 120)
+        && payment.amountPaise is int
+        && payment.amountPaise > 0
+        && (payment.partner == 'a' || payment.partner == 'b')
+        && isValidDateKey(payment.occurredOn)
+        && isValidText(payment.note, 1000)
+        && payment.createdAt is timestamp
+        && payment.updatedAt is timestamp
+        && isValidNonEmptyText(payment.createdBy, 320)
+        && isValidNonEmptyText(payment.updatedBy, 320)
+        && isValidNonEmptyText(payment.lastMutationId, 160);
+    }
+
+    function isValidExpense(expense) {
+      return expense is map
+        && expense.keys().hasAll([
+          'clientId', 'clientName', 'amountPaise', 'partner', 'category', 'occurredOn', 'note',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lastMutationId'
+        ])
+        && expense.keys().hasOnly([
+          'clientId', 'clientName', 'amountPaise', 'partner', 'category', 'occurredOn', 'note',
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lastMutationId'
+        ])
+        && (expense.clientId == null || isValidNonEmptyText(expense.clientId, 160))
+        && (expense.clientName == null || isValidNonEmptyText(expense.clientName, 120))
+        && ((expense.clientId == null && expense.clientName == null)
+          || (expense.clientId is string && expense.clientName is string))
+        && expense.amountPaise is int
+        && expense.amountPaise > 0
+        && (expense.partner == 'a' || expense.partner == 'b')
+        && (
+          expense.category == 'Advertising'
+          || expense.category == 'Contractor'
+          || expense.category == 'Equipment'
+          || expense.category == 'Office'
+          || expense.category == 'Software'
+          || expense.category == 'Travel'
+          || expense.category == 'Other'
+        )
+        && isValidDateKey(expense.occurredOn)
+        && isValidText(expense.note, 1000)
+        && expense.createdAt is timestamp
+        && expense.updatedAt is timestamp
+        && isValidNonEmptyText(expense.createdBy, 320)
+        && isValidNonEmptyText(expense.updatedBy, 320)
+        && isValidNonEmptyText(expense.lastMutationId, 160);
+    }
+
+    function isValidDelta(delta) {
+      return delta is map
+        && delta.keys().hasAll(['earned', 'spent', 'aReceived', 'bReceived', 'aSpent', 'bSpent'])
+        && delta.keys().hasOnly(['earned', 'spent', 'aReceived', 'bReceived', 'aSpent', 'bSpent'])
+        && delta.earned is int
+        && delta.spent is int
+        && delta.aReceived is int
+        && delta.bReceived is int
+        && delta.aSpent is int
+        && delta.bSpent is int;
+    }
+
+    function isValidMutation(mutation, mutationId) {
+      return mutation is map
+        && mutation.keys().hasAll([
+          'id', 'kind', 'recordType', 'recordId', 'delta', 'actorEmail', 'summary', 'createdAt'
+        ])
+        && mutation.keys().hasOnly([
+          'id', 'kind', 'recordType', 'recordId', 'delta', 'actorEmail', 'summary', 'createdAt'
+        ])
+        && mutation.id == mutationId
+        && (
+          mutation.kind == 'payment-create'
+          || mutation.kind == 'payment-update'
+          || mutation.kind == 'payment-delete'
+          || mutation.kind == 'expense-create'
+          || mutation.kind == 'expense-update'
+          || mutation.kind == 'expense-delete'
+        )
+        && (mutation.recordType == 'payment' || mutation.recordType == 'expense')
+        && isValidNonEmptyText(mutation.recordId, 160)
+        && isValidDelta(mutation.delta)
+        && mutation.actorEmail == authEmail()
+        && isValidNonEmptyText(mutation.summary, 160)
+        && mutation.createdAt is timestamp
+        && mutation.createdAt == request.time;
+    }
+
+    function totalsMatchDelta(before, after, delta) {
+      return hasValidTotals(before)
+        && hasValidTotals(after)
+        && after.earned == before.earned + delta.earned
+        && after.spent == before.spent + delta.spent
+        && after.a.received == before.a.received + delta.aReceived
+        && after.b.received == before.b.received + delta.bReceived
+        && after.a.spent == before.a.spent + delta.aSpent
+        && after.b.spent == before.b.spent + delta.bSpent;
+    }
+
+    function paymentCreateDeltaMatches(payment, delta) {
+      return delta.earned == payment.amountPaise
+        && delta.spent == 0
+        && delta.aReceived == (payment.partner == 'a' ? payment.amountPaise : 0)
+        && delta.bReceived == (payment.partner == 'b' ? payment.amountPaise : 0)
+        && delta.aSpent == 0
+        && delta.bSpent == 0;
+    }
+
+    function paymentUpdateDeltaMatches(before, after, delta) {
+      return delta.earned == after.amountPaise - before.amountPaise
+        && delta.spent == 0
+        && delta.aReceived ==
+          (after.partner == 'a' ? after.amountPaise : 0) -
+          (before.partner == 'a' ? before.amountPaise : 0)
+        && delta.bReceived ==
+          (after.partner == 'b' ? after.amountPaise : 0) -
+          (before.partner == 'b' ? before.amountPaise : 0)
+        && delta.aSpent == 0
+        && delta.bSpent == 0;
+    }
+
+    function paymentDeleteDeltaMatches(payment, delta) {
+      return delta.earned == 0 - payment.amountPaise
+        && delta.spent == 0
+        && delta.aReceived == (payment.partner == 'a' ? 0 - payment.amountPaise : 0)
+        && delta.bReceived == (payment.partner == 'b' ? 0 - payment.amountPaise : 0)
+        && delta.aSpent == 0
+        && delta.bSpent == 0;
+    }
+
+    function expenseCreateDeltaMatches(expense, delta) {
+      return delta.earned == 0
+        && delta.spent == expense.amountPaise
+        && delta.aReceived == 0
+        && delta.bReceived == 0
+        && delta.aSpent == (expense.partner == 'a' ? expense.amountPaise : 0)
+        && delta.bSpent == (expense.partner == 'b' ? expense.amountPaise : 0);
+    }
+
+    function expenseUpdateDeltaMatches(before, after, delta) {
+      return delta.earned == 0
+        && delta.spent == after.amountPaise - before.amountPaise
+        && delta.aReceived == 0
+        && delta.bReceived == 0
+        && delta.aSpent ==
+          (after.partner == 'a' ? after.amountPaise : 0) -
+          (before.partner == 'a' ? before.amountPaise : 0)
+        && delta.bSpent ==
+          (after.partner == 'b' ? after.amountPaise : 0) -
+          (before.partner == 'b' ? before.amountPaise : 0);
+    }
+
+    function expenseDeleteDeltaMatches(expense, delta) {
+      return delta.earned == 0
+        && delta.spent == 0 - expense.amountPaise
+        && delta.aReceived == 0
+        && delta.bReceived == 0
+        && delta.aSpent == (expense.partner == 'a' ? 0 - expense.amountPaise : 0)
+        && delta.bSpent == (expense.partner == 'b' ? 0 - expense.amountPaise : 0);
+    }
+
+    function activeClientMatchesPayment(vaultId, payment) {
+      return existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/clients/$(payment.clientId))
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/clients/$(payment.clientId)).data.isArchived == false
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/clients/$(payment.clientId)).data.name == payment.clientName;
+    }
+
+    function optionalClientMatchesExpense(vaultId, expense) {
+      return expense.clientId == null
+        || (
+          existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/clients/$(expense.clientId))
+          && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/clients/$(expense.clientId)).data.name == expense.clientName
+        );
+    }
+
+    function hasLinkedMutation(vaultId, mutationId, kind, recordType, recordId) {
+      return isValidNonEmptyText(mutationId, 160)
+        && existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId))
+        && !exists(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId))
+        && isValidMutation(
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId)).data,
+          mutationId
+        )
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId)).data.kind == kind
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId)).data.recordType == recordType
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId)).data.recordId == recordId
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)).data.lastMutationId == mutationId;
+    }
+
+    function paymentMutationIsConsistent(vaultId, mutation) {
+      return (
+        mutation.kind == 'payment-create'
+        && mutation.recordType == 'payment'
+        && !exists(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId))
+        && existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId))
+        && isValidPayment(getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data)
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data.lastMutationId == mutation.id
+        && paymentCreateDeltaMatches(
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data,
+          mutation.delta
+        )
+      ) || (
+        mutation.kind == 'payment-update'
+        && mutation.recordType == 'payment'
+        && exists(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId))
+        && existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId))
+        && isValidPayment(get(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data)
+        && isValidPayment(getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data)
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data.lastMutationId == mutation.id
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data != get(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data
+        && paymentUpdateDeltaMatches(
+          get(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data,
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data,
+          mutation.delta
+        )
+      ) || (
+        mutation.kind == 'payment-delete'
+        && mutation.recordType == 'payment'
+        && exists(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId))
+        && !existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId))
+        && isValidPayment(get(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data)
+        && paymentDeleteDeltaMatches(
+          get(/databases/$(database)/documents/vaults/$(vaultId)/payments/$(mutation.recordId)).data,
+          mutation.delta
+        )
+      );
+    }
+
+    function expenseMutationIsConsistent(vaultId, mutation) {
+      return (
+        mutation.kind == 'expense-create'
+        && mutation.recordType == 'expense'
+        && !exists(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId))
+        && existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId))
+        && isValidExpense(getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data)
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data.lastMutationId == mutation.id
+        && expenseCreateDeltaMatches(
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data,
+          mutation.delta
+        )
+      ) || (
+        mutation.kind == 'expense-update'
+        && mutation.recordType == 'expense'
+        && exists(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId))
+        && existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId))
+        && isValidExpense(get(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data)
+        && isValidExpense(getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data)
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data.lastMutationId == mutation.id
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data != get(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data
+        && expenseUpdateDeltaMatches(
+          get(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data,
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data,
+          mutation.delta
+        )
+      ) || (
+        mutation.kind == 'expense-delete'
+        && mutation.recordType == 'expense'
+        && exists(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId))
+        && !existsAfter(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId))
+        && isValidExpense(get(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data)
+        && expenseDeleteDeltaMatches(
+          get(/databases/$(database)/documents/vaults/$(vaultId)/expenses/$(mutation.recordId)).data,
+          mutation.delta
+        )
+      );
+    }
+
+    function mutationIsConsistent(vaultId, mutation) {
+      return paymentMutationIsConsistent(vaultId, mutation)
+        || expenseMutationIsConsistent(vaultId, mutation);
+    }
+
+    function validVaultAggregateUpdate(vaultId) {
+      return request.resource.data.keys().hasAll([
+          'name', 'createdAt', 'members', 'totals', 'updatedAt', 'lastMutationId'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'name', 'createdAt', 'members', 'totals', 'updatedAt', 'lastMutationId'
+        ])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'totals', 'updatedAt', 'lastMutationId'
+        ])
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.members == resource.data.members
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && isValidNonEmptyText(request.resource.data.lastMutationId, 160)
+        && request.resource.data.lastMutationId != resource.data.get('lastMutationId', '')
+        && existsAfter(
+          /databases/$(database)/documents/vaults/$(vaultId)/mutations/$(request.resource.data.lastMutationId)
+        )
+        && !exists(
+          /databases/$(database)/documents/vaults/$(vaultId)/mutations/$(request.resource.data.lastMutationId)
+        )
+        && isValidMutation(
+          getAfter(
+            /databases/$(database)/documents/vaults/$(vaultId)/mutations/$(request.resource.data.lastMutationId)
+          ).data,
+          request.resource.data.lastMutationId
+        )
+        && totalsMatchDelta(
+          resource.data.totals,
+          request.resource.data.totals,
+          getAfter(
+            /databases/$(database)/documents/vaults/$(vaultId)/mutations/$(request.resource.data.lastMutationId)
+          ).data.delta
         );
     }
 
     match /vaults/{vaultId} {
       allow create: if signedInWithVerifiedGoogleEmail()
         && isValidInitialVault()
-        && isVaultMember(request.resource.data);
+        && isVaultMemberData(request.resource.data);
 
-      allow get, list: if isVaultMember(resource.data);
+      allow get, list: if isVaultMemberData(resource.data);
 
-      // Settings and all aggregate updates wait for the full Step 5 rule set.
+      allow update: if isVaultMemberData(resource.data)
+        && validVaultAggregateUpdate(vaultId);
+
+      allow delete: if false;
+    }
+
+    match /vaults/{vaultId}/clients/{clientId} {
+      allow get, list: if isVaultMember(vaultId);
+
+      allow create: if isVaultMember(vaultId)
+        && isValidClient(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.createdBy == authEmail()
+        && request.resource.data.updatedBy == authEmail();
+
+      allow update: if isVaultMember(vaultId)
+        && isValidClient(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == authEmail();
+
+      allow delete: if false;
+    }
+
+    match /vaults/{vaultId}/payments/{paymentId} {
+      allow get, list: if isVaultMember(vaultId);
+
+      allow create: if isVaultMember(vaultId)
+        && isValidPayment(request.resource.data)
+        && activeClientMatchesPayment(vaultId, request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.createdBy == authEmail()
+        && request.resource.data.updatedBy == authEmail()
+        && hasLinkedMutation(vaultId, request.resource.data.lastMutationId, 'payment-create', 'payment', paymentId);
+
+      allow update: if isVaultMember(vaultId)
+        && isValidPayment(request.resource.data)
+        && activeClientMatchesPayment(vaultId, request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == authEmail()
+        && request.resource.data.lastMutationId != resource.data.lastMutationId
+        && hasLinkedMutation(vaultId, request.resource.data.lastMutationId, 'payment-update', 'payment', paymentId);
+
+      allow delete: if isVaultMember(vaultId)
+        && hasLinkedMutation(
+          vaultId,
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)).data.lastMutationId,
+          'payment-delete',
+          'payment',
+          paymentId
+        );
+    }
+
+    match /vaults/{vaultId}/expenses/{expenseId} {
+      allow get, list: if isVaultMember(vaultId);
+
+      allow create: if isVaultMember(vaultId)
+        && isValidExpense(request.resource.data)
+        && optionalClientMatchesExpense(vaultId, request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.createdBy == authEmail()
+        && request.resource.data.updatedBy == authEmail()
+        && hasLinkedMutation(vaultId, request.resource.data.lastMutationId, 'expense-create', 'expense', expenseId);
+
+      allow update: if isVaultMember(vaultId)
+        && isValidExpense(request.resource.data)
+        && optionalClientMatchesExpense(vaultId, request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == authEmail()
+        && request.resource.data.lastMutationId != resource.data.lastMutationId
+        && hasLinkedMutation(vaultId, request.resource.data.lastMutationId, 'expense-update', 'expense', expenseId);
+
+      allow delete: if isVaultMember(vaultId)
+        && hasLinkedMutation(
+          vaultId,
+          getAfter(/databases/$(database)/documents/vaults/$(vaultId)).data.lastMutationId,
+          'expense-delete',
+          'expense',
+          expenseId
+        );
+    }
+
+    match /vaults/{vaultId}/mutations/{mutationId} {
+      allow get, list: if isVaultMember(vaultId);
+
+      allow create: if isVaultMember(vaultId)
+        && !exists(/databases/$(database)/documents/vaults/$(vaultId)/mutations/$(mutationId))
+        && isValidMutation(request.resource.data, mutationId)
+        && getAfter(/databases/$(database)/documents/vaults/$(vaultId)).data.lastMutationId == mutationId
+        && mutationIsConsistent(vaultId, request.resource.data);
+
       allow update, delete: if false;
     }
 

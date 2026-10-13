@@ -1,8 +1,9 @@
-# Dependencies, package-manager caches, and build output
+# Dependencies, package-manager caches, generated framework output, and test coverage
 node_modules/
 .npm/
 .svelte-kit/
 build/
+coverage/
 
 # Local Firebase/Vercel state and logs
 .firebase/
@@ -10,11 +11,18 @@ build/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+*.log
 
 # Local environment values
 .env
 .env.*
 !.env.example
+
+# Sandbox or machine-local state that must never be committed
+.cache/
+.config/
+.ssh/
+.sudo_as_admin_successful
 
 # Operating-system and editor files
 .DS_Store

@@ -12,7 +12,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "verify": "npm run check && npm run build",
+    "test:rules": "firebase emulators:exec --only firestore --project vault-rules-test \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs\"",
+    "verify": "npm run check && npm run test:rules && npm run build",
     "emulators": "firebase emulators:start --only auth,firestore --project vault-local",
     "firestore:rules:deploy": "firebase deploy --only firestore:rules"
   },
@@ -20,9 +21,11 @@
     "firebase": "13.0.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
     "@sveltejs/adapter-static": "3.0.10",
     "@sveltejs/kit": "2.70.3",
     "@sveltejs/vite-plugin-svelte": "6.2.4",
+    "@vite-pwa/sveltekit": "1.1.0",
     "firebase-tools": "15.33.0",
     "svelte": "5.57.2",
     "svelte-check": "4.7.6",
