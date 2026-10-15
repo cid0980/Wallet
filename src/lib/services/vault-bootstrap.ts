@@ -140,8 +140,14 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 		throw new Error('Your signed-in Google email must be entered as Partner A or Partner B.');
 	}
 
-	// Preserve Firebase Auth's exact email casing for the signed-in member because
-	// Firestore rules compare it directly to request.auth.token.email.
+	// Google always returns the account email in lower case, and the security
+	// rules compare it against request.auth.token.email character for character.
+	// A partner address typed with a capital letter would therefore never match:
+	// that partner would be denied, and their membership query would find no
+	// vault and offer to create a second one. Store both addresses lower-cased,
+	// then restore the signed-in member's exact Auth casing.
+	members.a.email = members.a.email.toLocaleLowerCase();
+	members.b.email = members.b.email.toLocaleLowerCase();
 	ownPartner.email = signedInEmail;
 
 	const vaultRef = doc(collection(db, 'vaults'));

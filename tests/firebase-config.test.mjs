@@ -202,3 +202,33 @@ test('rules-denied guidance points at the console and the published file', async
 	const lineCount = rules.trim().split('\n').length;
 	assert.ok(lineCount > 400, `expected the full rule set, saw ${lineCount} lines`);
 });
+
+test('stored member emails match what Google tokens and the rules compare', async () => {
+	// Mirrors createInitialVault's normalization: both addresses lower-cased,
+	// signed-in member restored to the exact Auth casing.
+	const signedInEmail = 'asencid07@gmail.com'; // Google returns lower case
+	const typedPartnerEmail = '  Partner.Two@Gmail.COM  ';
+
+	const members = {
+		a: { name: 'Cid', email: signedInEmail },
+		b: { name: 'Two', email: typedPartnerEmail.trim() }
+	};
+
+	members.a.email = members.a.email.toLocaleLowerCase();
+	members.b.email = members.b.email.toLocaleLowerCase();
+	const ownPartner = members.a;
+	ownPartner.email = signedInEmail;
+
+	// The vault document's members must equal the token email the rules compare.
+	assert.equal(members.a.email, signedInEmail);
+	assert.equal(members.b.email, 'partner.two@gmail.com');
+
+	// The partner's membership query uses the resolved (lower-case) token email,
+	// so the stored value has to match it exactly.
+	const storedPartner = members.b.email;
+	const partnerTokenEmail = 'partner.two@gmail.com';
+	assert.equal(storedPartner, partnerTokenEmail);
+
+	// A capitalised address from the setup form would have missed both.
+	assert.notEqual(typedPartnerEmail.trim(), partnerTokenEmail);
+});
