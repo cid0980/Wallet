@@ -1,0 +1,14 @@
+{
+  "name": "Our Vault",
+  "createdAt": "<replace with a Firebase Timestamp>",
+  "members": {
+    "a": { "name": "Cid", "email": "asencid07@gmail.com" },
+    "b": { "name": "Partner", "email": "partner@gmail.com" }
+  },
+  "totals": {
+    "earned": 0,
+    "spent": 0,
+    "a": { "received": 0, "spent": 0 },
+    "b": { "received": 0, "spent": 0 }
+  }
+}

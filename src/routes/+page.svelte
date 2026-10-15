@@ -4,12 +4,11 @@
 
 	import PwaUpdatePrompt from '$lib/components/app/PwaUpdatePrompt.svelte';
 	import VaultWorkspace from '$lib/components/app/VaultWorkspace.svelte';
-	import GoogleLogin from '$lib/components/auth/GoogleLogin.svelte';
+	import EmailLogin from '$lib/components/auth/EmailLogin.svelte';
 	import VaultSetupForm from '$lib/components/setup/VaultSetupForm.svelte';
 	import {
 		FIRESTORE_RULES_FILE_URL,
 		authSettingsConsoleUrl,
-		authUsersConsoleUrl,
 		firestoreRulesConsoleUrl
 	} from '$lib/firebase/client';
 	import { inspectAccount, formatInspection } from '$lib/firebase/account';
@@ -18,7 +17,14 @@
 		probeVaultReadAccess,
 		vaultErrorMessage
 	} from '$lib/services/vault-bootstrap';
-	import { authState, signInWithGoogle, signOutOfVault, startAuthObserver, stopAuthObserver } from '$lib/stores/auth';
+	import {
+		authState,
+		createAccountWithEmail,
+		signInWithEmail,
+		signOutOfVault,
+		startAuthObserver,
+		stopAuthObserver
+	} from '$lib/stores/auth';
 	import { clearVaultData, observeVaultData, vaultData } from '$lib/stores/vault-data';
 	import {
 		clearVaultSession,
@@ -39,7 +45,6 @@
 	let accessCheckDetail: string | null = null;
 
 	const rulesConsoleUrl = firestoreRulesConsoleUrl();
-	const usersConsoleUrl = authUsersConsoleUrl();
 	const settingsConsoleUrl = authSettingsConsoleUrl();
 
 	/**
@@ -268,13 +273,13 @@
 				<p>Checking your secure Vault session…</p>
 			</section>
 		{:else if $authState.status === 'signed-out' || $authState.status === 'signing-in' || $authState.status === 'error'}
-			<GoogleLogin
+			<EmailLogin
 				busy={$authState.status === 'signing-in'}
 				error={$authState.error}
 				diagnostic={$authState.diagnostic}
-				usersConsoleUrl={usersConsoleUrl}
 				settingsConsoleUrl={settingsConsoleUrl}
-				onSignIn={signInWithGoogle}
+				onSignIn={signInWithEmail}
+				onCreateAccount={createAccountWithEmail}
 			/>
 		{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}
 			{#if $vaultSession.status === 'idle' || $vaultSession.status === 'loading'}

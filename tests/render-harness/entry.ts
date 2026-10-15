@@ -54,8 +54,8 @@ type Scenario = {
 
 const scenarios: Scenario[] = [
 	{ name: 'loading', auth: { status: 'loading', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Checking your secure Vault session' },
-	{ name: 'signed-out', auth: { status: 'signed-out', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Continue with Google' },
-	{ name: 'signing-in', auth: { status: 'signing-in', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Opening Google' },
+	{ name: 'signed-out', auth: { status: 'signed-out', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Sign in' },
+	{ name: 'signing-in', auth: { status: 'signing-in', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Signing in' },
 	{ name: 'session loading', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'loading' }, data: { status: 'idle' }, expect: 'Finding your shared Vault' },
 	{ name: 'no-vault', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'no-vault' }, data: { status: 'idle' }, expect: 'Create the shared vault' },
 	{ name: 'session error', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'error', error: 'denied' }, data: { status: 'idle' }, expect: 'We could not open your Vault' },

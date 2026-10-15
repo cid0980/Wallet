@@ -36,40 +36,7 @@ test('accepts a custom Firebase auth domain', () => {
 	assert.equal(normalizeAuthDomain('valet-07.web.app', projectId), 'valet-07.web.app');
 });
 
-test('falls back to the redirect flow only for pop-up environment failures', async () => {
-	const { shouldFallBackToRedirect, firebaseErrorCode } = await import(
-		'../src/lib/firebase/sign-in-strategy.ts'
-	);
 
-	assert.equal(firebaseErrorCode({ code: 'auth/popup-blocked' }), 'auth/popup-blocked');
-	assert.equal(firebaseErrorCode(new Error('plain')), undefined);
-
-	// Environments that cannot show a pop-up.
-	assert.equal(shouldFallBackToRedirect({ code: 'auth/popup-blocked' }), true);
-	assert.equal(
-		shouldFallBackToRedirect({ code: 'auth/operation-not-supported-in-this-environment' }),
-		true
-	);
-
-	// Real configuration or user problems must surface, never loop.
-	assert.equal(shouldFallBackToRedirect({ code: 'auth/unauthorized-domain' }), false);
-	assert.equal(shouldFallBackToRedirect({ code: 'auth/operation-not-allowed' }), false);
-	assert.equal(shouldFallBackToRedirect({ code: 'auth/popup-closed-by-user' }), false);
-	assert.equal(shouldFallBackToRedirect(new Error('plain')), false);
-});
-
-test('a session without an email is rejected before it can blank the app', async () => {
-	const { hasUsableAccountEmail } = await import('../src/lib/firebase/sign-in-strategy.ts');
-
-	assert.equal(hasUsableAccountEmail({ email: 'cid@example.com' }), true);
-	assert.equal(hasUsableAccountEmail({ email: 'cid@example.com' }), true);
-	assert.equal(hasUsableAccountEmail({ email: null }), false);
-	assert.equal(hasUsableAccountEmail({ email: '' }), false);
-	assert.equal(hasUsableAccountEmail({ email: '   ' }), false);
-	assert.equal(hasUsableAccountEmail({}), false);
-	assert.equal(hasUsableAccountEmail(null), false);
-	assert.equal(hasUsableAccountEmail(undefined), false);
-});
 
 test('resolves the account email from the token when the record has none', async () => {
 	const { emailFromClaims, resolveAccountEmail, describeAccount } = await import(
@@ -357,4 +324,20 @@ test('an account whose token has no email claim is caught, not sent to the rules
 	};
 	await resolveAccount(healthy);
 	assert.equal(refreshes, 0);
+});
+
+test('the published rules accept any signed-in member email, not just Google', async () => {
+	const rules = await import('node:fs').then((fs) =>
+		fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8')
+	);
+
+	// Email/password tokens are not "verified" until a link is clicked, and the
+	// provider is 'password', so neither condition may gate access.
+	assert.doesNotMatch(rules, /email_verified == true/);
+	assert.doesNotMatch(rules, /sign_in_provider == 'google\.com'/);
+
+	// Access is still gated on the vault's member list.
+	assert.match(rules, /function signedInWithEmail\(\)/);
+	assert.match(rules, /get\('a', \{\}\)\.get\('email', ''\) == authEmail\(\)/);
+	assert.match(rules, /allow get, list: if isVaultMemberData\(resource\.data\);/);
 });

@@ -10,7 +10,9 @@ export const vaultSession = writable<unknown>({ status: 'idle' });
 export const vaultData = writable<unknown>({ status: 'idle' });
 
 export function startAuthObserver(): void {}
-export function signInWithGoogle(): void {}
+export function signInWithEmail(): void {}
+export function createAccountWithEmail(): void {}
+
 export function signOutOfVault(): void {}
 export function stopAuthObserver(): void {}
 export function observeVaultSession(): void {}

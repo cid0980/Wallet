@@ -9,11 +9,15 @@ service cloud.firestore {
     //   3. vault aggregate totals
     // getAfter()/existsAfter() make the three writes inseparable.
 
-    function signedInWithVerifiedGoogleEmail() {
+    // Vault is private to the two members named in its member list. Membership
+    // is what grants access: any signed-in account whose token carries an email
+    // is considered, and isVaultMemberData() then requires that email to be in
+    // the vault's member list. This works for email/password and Google
+    // accounts alike, and does not depend on an email_verified claim.
+    function signedInWithEmail() {
       return request.auth != null
         && request.auth.token.email is string
-        && request.auth.token.email_verified == true
-        && request.auth.token.firebase.sign_in_provider == 'google.com';
+        && request.auth.token.email.size() > 0;
     }
 
     function authEmail() {
@@ -90,7 +94,7 @@ service cloud.firestore {
     function isVaultMemberData(vault) {
       // Map.get defaults avoid undefined-property evaluation for collection
       // queries, whose candidate documents are not schema-narrowed yet.
-      return signedInWithVerifiedGoogleEmail()
+      return signedInWithEmail()
         && vault is map
         && (
           vault.get('members', {}).get('a', {}).get('email', '') == authEmail()
@@ -449,7 +453,7 @@ service cloud.firestore {
     }
 
     match /vaults/{vaultId} {
-      allow create: if signedInWithVerifiedGoogleEmail()
+      allow create: if signedInWithEmail()
         && isValidInitialVault()
         && isVaultMemberData(request.resource.data);
 

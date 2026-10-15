@@ -26,18 +26,21 @@ const eveEmail = 'eve@example.com';
 
 let testEnvironment;
 
-function googleDb(email) {
+// Members now sign in with email/password, whose tokens are not "verified"
+// until a link is clicked and whose provider is 'password'.
+function memberDb(email) {
 	return testEnvironment.authenticatedContext(`uid-${email}`, {
 		email,
-		email_verified: true,
-		firebase: { sign_in_provider: 'google.com' }
+		email_verified: false,
+		firebase: { sign_in_provider: 'password' }
 	}).firestore();
 }
 
-function nonGoogleDb(email) {
+// The same account shape, used to prove a non-member is still refused.
+function nonMemberDb(email) {
 	return testEnvironment.authenticatedContext(`uid-${email}`, {
 		email,
-		email_verified: true,
+		email_verified: false,
 		firebase: { sign_in_provider: 'password' }
 	}).firestore();
 }
@@ -193,10 +196,10 @@ after(async () => {
 	await testEnvironment.cleanup();
 });
 
-test('allows an initial vault only for a verified Google member', async () => {
+test('allows an initial vault only for an account listed as a member', async () => {
 	await testEnvironment.clearFirestore();
-	const aliceDb = googleDb(aliceEmail);
-	const eveDb = googleDb(eveEmail);
+	const aliceDb = memberDb(aliceEmail);
+	const eveDb = memberDb(eveEmail);
 	const initial = {
 		name: 'New Vault',
 		createdAt: serverTimestamp(),
@@ -207,22 +210,41 @@ test('allows an initial vault only for a verified Google member', async () => {
 		totals: zeroTotals()
 	};
 
+	// An email/password account that is listed as a member may create the vault,
+	// even though its token is not "verified".
 	await assertSucceeds(setDoc(doc(aliceDb, 'vaults', 'new-vault'), initial));
+
+	// An account that is not in the member list may not.
 	await assertFails(setDoc(doc(eveDb, 'vaults', 'blocked-vault'), initial));
-	await assertFails(setDoc(doc(nonGoogleDb(aliceEmail), 'vaults', 'password-vault'), initial));
+
+	// A vault whose member list excludes the creator is refused.
+	const selfless = {
+		...initial,
+		members: {
+			a: { name: 'Bob', email: bobEmail },
+			b: { name: 'Eve', email: eveEmail }
+		}
+	};
+	await assertFails(setDoc(doc(aliceDb, 'vaults', 'selfless-vault'), selfless));
+
+	// A token without an email is refused outright.
+	const noEmail = testEnvironment
+		.authenticatedContext('uid-no-email', { email: null, firebase: { sign_in_provider: 'password' } })
+		.firestore();
+	await assertFails(setDoc(doc(noEmail, 'vaults', 'no-email-vault'), initial));
 });
 
 test('allows members and denies non-members when reading vault data', async () => {
-	await assertSucceeds(getDoc(doc(googleDb(aliceEmail), 'vaults', vaultId)));
-	await assertSucceeds(getDoc(doc(googleDb(bobEmail), 'vaults', vaultId, 'clients', 'client-acme')));
-	await assertFails(getDoc(doc(googleDb(eveEmail), 'vaults', vaultId)));
+	await assertSucceeds(getDoc(doc(memberDb(aliceEmail), 'vaults', vaultId)));
+	await assertSucceeds(getDoc(doc(memberDb(bobEmail), 'vaults', vaultId, 'clients', 'client-acme')));
+	await assertFails(getDoc(doc(memberDb(eveEmail), 'vaults', vaultId)));
 	await assertFails(getDoc(doc(testEnvironment.unauthenticatedContext().firestore(), 'vaults', vaultId)));
 });
 
 test('allows only constrained member-discovery queries', async () => {
-	const aliceDb = googleDb(aliceEmail);
-	const bobDb = googleDb(bobEmail);
-	const eveDb = googleDb(eveEmail);
+	const aliceDb = memberDb(aliceEmail);
+	const bobDb = memberDb(bobEmail);
+	const eveDb = memberDb(eveEmail);
 
 	await assertSucceeds(
 		getDocs(query(collection(aliceDb, 'vaults'), where('members.a.email', '==', aliceEmail)))
@@ -237,8 +259,8 @@ test('allows only constrained member-discovery queries', async () => {
 });
 
 test('allows a member to create a valid client and blocks a non-member', async () => {
-	const aliceDb = googleDb(aliceEmail);
-	const eveDb = googleDb(eveEmail);
+	const aliceDb = memberDb(aliceEmail);
+	const eveDb = memberDb(eveEmail);
 	const client = {
 		name: 'Good Client',
 		contact: '',
@@ -255,7 +277,7 @@ test('allows a member to create a valid client and blocks a non-member', async (
 });
 
 test('allows a valid three-document payment batch and keeps totals atomic', async () => {
-	const aliceDb = googleDb(aliceEmail);
+	const aliceDb = memberDb(aliceEmail);
 	await assertSucceeds(addValidPayment(aliceDb));
 
 	const vault = await getDoc(doc(aliceDb, 'vaults', vaultId));
@@ -272,7 +294,7 @@ test('allows a valid three-document payment batch and keeps totals atomic', asyn
 });
 
 test('allows a valid three-document expense batch and updates the paying partner total', async () => {
-	const aliceDb = googleDb(aliceEmail);
+	const aliceDb = memberDb(aliceEmail);
 	const batch = writeBatch(aliceDb);
 	const delta = expenseDelta(50_00, 'b');
 	batch.set(doc(aliceDb, 'vaults', vaultId, 'expenses', 'expense-1'), expenseFields('expense-mutation-1', 50_00, 'b'));
@@ -290,7 +312,7 @@ test('allows a valid three-document expense batch and updates the paying partner
 });
 
 test('denies direct ledger or aggregate manipulation', async () => {
-	const aliceDb = googleDb(aliceEmail);
+	const aliceDb = memberDb(aliceEmail);
 	const roguePayment = paymentFields('not-a-real-mutation', 500_00);
 
 	await assertFails(setDoc(doc(aliceDb, 'vaults', vaultId, 'payments', 'rogue-payment'), roguePayment));
@@ -298,7 +320,7 @@ test('denies direct ledger or aggregate manipulation', async () => {
 });
 
 test('denies a mismatched mutation delta even inside a batch', async () => {
-	const aliceDb = googleDb(aliceEmail);
+	const aliceDb = memberDb(aliceEmail);
 	const batch = writeBatch(aliceDb);
 	const badDelta = paymentDelta(999_00);
 	batch.set(doc(aliceDb, 'vaults', vaultId, 'payments', 'payment-bad'), paymentFields('mutation-bad', 100_00));
@@ -312,7 +334,7 @@ test('denies a mismatched mutation delta even inside a batch', async () => {
 });
 
 test('allows a valid payment edit and removal through linked batches', async () => {
-	const aliceDb = googleDb(aliceEmail);
+	const aliceDb = memberDb(aliceEmail);
 	await assertSucceeds(addValidPayment(aliceDb));
 
 	const updateBatch = writeBatch(aliceDb);
@@ -342,7 +364,7 @@ test('allows a valid payment edit and removal through linked batches', async () 
 });
 
 test('does not allow a member to delete a client or mutate an audit record', async () => {
-	const aliceDb = googleDb(aliceEmail);
+	const aliceDb = memberDb(aliceEmail);
 	await assertFails(deleteDoc(doc(aliceDb, 'vaults', vaultId, 'clients', 'client-acme')));
 	await assertSucceeds(addValidPayment(aliceDb));
 	await assertFails(updateDoc(doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-1'), { summary: 'Tampered' }));
