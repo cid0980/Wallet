@@ -32,7 +32,7 @@
 		};
 	});
 
-	$: currentEmail = $authState.user?.email ?? null;
+	$: currentEmail = $authState.email ?? null;
 
 	$: if ($authState.status === 'signed-in' && currentEmail && observedEmail !== currentEmail) {
 		observedEmail = currentEmail;
@@ -257,7 +257,8 @@
 		<dl class="diagnostics">
 			<div><dt>Session</dt><dd>{$vaultSession.status}</dd></div>
 			<div><dt>Records</dt><dd>{$vaultData.status}</dd></div>
-			<div><dt>Account</dt><dd>{currentEmail ?? 'none'}</dd></div>
+			<div><dt>Account</dt><dd>{currentEmail ?? 'no email shared'}</dd></div>
+			<div><dt>User ID</dt><dd>{$authState.user?.uid ?? 'none'}</dd></div>
 		</dl>
 		<div class="actions">
 			<button class="primary" type="button" onclick={restartVaultStartup}>Try again</button>

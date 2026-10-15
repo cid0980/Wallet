@@ -13,6 +13,7 @@ import {
 	type Unsubscribe
 } from 'firebase/firestore';
 
+import { resolveAccountEmail } from '$lib/firebase/account';
 import { getFirebaseClient } from '$lib/firebase/client';
 import type { VaultMember, VaultSetupInput, VaultSummary, VaultTotals } from '$lib/types/vault';
 import { isValidPaise } from '$lib/utils/money';
@@ -107,7 +108,8 @@ function initialTotals(): VaultTotals {
 /** Creates a vault with zero paise totals. */
 export async function createInitialVault(input: VaultSetupInput): Promise<string> {
 	const { auth, db } = getFirebaseClient();
-	const signedInEmail = auth.currentUser?.email?.trim();
+	// Resolved from the token as well as the record, matching the sign-in guard.
+	const signedInEmail = await resolveAccountEmail(auth.currentUser);
 	const name = cleanText(input.name);
 	const members = {
 		a: cleanMember(input.members.a),

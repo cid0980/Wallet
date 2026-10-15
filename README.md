@@ -207,4 +207,12 @@ The page previously had no fallback branch, so an unexpected combination of auth
 
 `npm run test:render` renders the real `+page.svelte` against every session/vault/data combination and fails if any of them is empty or missing its expected content. It runs inside `npm run verify`.
 
+### "The app stops after sign-in and the Firebase Users table shows no email"
+
+Firebase Authentication created the user, but the account shared no email claim. Vault signs with the account email twice over: it finds the shared vault by it, and the Firestore rules compare it against `request.auth.token.email`. Vault resolves the email from the user record and, when that is empty, from the ID token claims, then refuses the session with a clear message if neither has one. Some work, school, or admin-restricted Google accounts never share an email. Sign in with a personal Google account.
+
+### Publish the current Firestore rules before recording money
+
+The Step 1 bootstrap policy in git history only covers vault creation and discovery. Its catch-all (`match /vaults/{vaultId}/{document=**} { allow read, write: if false; }`) denies every client, payment, expense, and history read, so a created vault would open straight into "We could not load your records." Copy the repository's current `firestore.rules` (the 500+ line policy tested by `npm run test:rules`) into Firestore Database → Rules and publish it.
+
 Run `npm run test:unit` for the auth-domain, sign-in-strategy, and account-email regression tests, `npm run test:render` for the render harness, and `npm run verify` before pushing.

@@ -53,20 +53,34 @@ type Scenario = {
 };
 
 const scenarios: Scenario[] = [
-	{ name: 'loading', auth: { status: 'loading', user: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Checking your secure Vault session' },
-	{ name: 'signed-out', auth: { status: 'signed-out', user: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Continue with Google' },
-	{ name: 'signing-in', auth: { status: 'signing-in', user: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Opening Google' },
-	{ name: 'session loading', auth: { status: 'signed-in', user, error: null }, session: { status: 'loading' }, data: { status: 'idle' }, expect: 'Finding your shared Vault' },
-	{ name: 'no-vault', auth: { status: 'signed-in', user, error: null }, session: { status: 'no-vault' }, data: { status: 'idle' }, expect: 'Create the shared vault' },
-	{ name: 'session error', auth: { status: 'signed-in', user, error: null }, session: { status: 'error', error: 'denied' }, data: { status: 'idle' }, expect: 'We could not open your Vault' },
-	{ name: 'records loading', auth: { status: 'signed-in', user, error: null }, session: { status: 'ready', vault }, data: { status: 'loading' }, expect: 'Loading your shared records' },
-	{ name: 'records error', auth: { status: 'signed-in', user, error: null }, session: { status: 'ready', vault }, data: { status: 'error', error: 'denied' }, expect: 'We could not load your records' },
-	{ name: 'workspace', auth: { status: 'signed-in', user, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'Available balance' },
-	{ name: 'signed-in without email (raw state)', auth: { status: 'signed-in', user: { ...user, email: null }, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'did not finish starting' },
-	{ name: 'ready session without vault', auth: { status: 'signed-in', user, error: null }, session: { status: 'ready', vault: null }, data: readyData, expect: 'did not finish starting' },
-	{ name: 'records ready before session', auth: { status: 'signed-in', user, error: null }, session: { status: 'no-vault' }, data: readyData, expect: 'Create the shared vault' },
-	{ name: 'session never observed', auth: { status: 'signed-in', user, error: null }, session: { status: 'idle' }, data: readyData, expect: 'Finding your shared Vault' },
-	{ name: 'error state with message', auth: { status: 'error', user: null, error: 'auth/unauthorized-domain' }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'auth/unauthorized-domain' }
+	{ name: 'loading', auth: { status: 'loading', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Checking your secure Vault session' },
+	{ name: 'signed-out', auth: { status: 'signed-out', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Continue with Google' },
+	{ name: 'signing-in', auth: { status: 'signing-in', user: null, email: null, error: null }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Opening Google' },
+	{ name: 'session loading', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'loading' }, data: { status: 'idle' }, expect: 'Finding your shared Vault' },
+	{ name: 'no-vault', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'no-vault' }, data: { status: 'idle' }, expect: 'Create the shared vault' },
+	{ name: 'session error', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'error', error: 'denied' }, data: { status: 'idle' }, expect: 'We could not open your Vault' },
+	{ name: 'records loading', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { status: 'loading' }, expect: 'Loading your shared records' },
+	{ name: 'records error', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { status: 'error', error: 'denied' }, expect: 'We could not load your records' },
+	{ name: 'workspace', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'Available balance' },
+	{ name: 'signed-in without email (raw state)', auth: { status: 'signed-in', user: { ...user, email: null }, email: null, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'did not finish starting' },
+	{ name: 'ready session without vault', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault: null }, data: readyData, expect: 'did not finish starting' },
+	{ name: 'records ready before session', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'no-vault' }, data: readyData, expect: 'Create the shared vault' },
+	{ name: 'session never observed', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'idle' }, data: readyData, expect: 'Finding your shared Vault' },
+	{
+		name: 'token email resolves where the record has none',
+		auth: { status: 'signed-in', user: { ...user, email: null }, email: 'cid@example.com', error: null },
+		session: { status: 'loading' },
+		data: { status: 'idle' },
+		expect: 'Finding your shared Vault'
+	},
+	{
+		name: 'account without any email shows the startup card',
+		auth: { status: 'signed-in', user: { ...user, email: null }, email: null, error: null },
+		session: { status: 'ready', vault },
+		data: readyData,
+		expect: 'did not finish starting'
+	},
+	{ name: 'error state with message', auth: { status: 'error', user: null, email: null, error: 'auth/unauthorized-domain' }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'auth/unauthorized-domain' }
 ];
 
 const failures: string[] = [];

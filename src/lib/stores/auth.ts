@@ -11,24 +11,27 @@ import {
 } from 'firebase/auth';
 import { writable } from 'svelte/store';
 
+import { describeAccount, resolveAccountEmail } from '$lib/firebase/account';
 import { getFirebaseClient } from '$lib/firebase/client';
-import {
-	firebaseErrorCode,
-	hasUsableAccountEmail,
-	shouldFallBackToRedirect
-} from '$lib/firebase/sign-in-strategy';
+import { firebaseErrorCode, shouldFallBackToRedirect } from '$lib/firebase/sign-in-strategy';
 
 export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'signing-in' | 'error';
 
 export interface AuthState {
 	status: AuthStatus;
 	user: User | null;
+	/**
+	 * The account email Vault signs with. Resolved from the user record or the
+	 * ID token claims, and null when the provider shared none.
+	 */
+	email: string | null;
 	error: string | null;
 }
 
 export const authState = writable<AuthState>({
 	status: 'loading',
 	user: null,
+	email: null,
 	error: null
 });
 
@@ -42,17 +45,53 @@ const REDIRECT_WATCHDOG_MS = 12_000;
 /**
  * Written just before a full-page redirect and read when the page comes back.
  * Without it, a redirect that returns with no session and no error is
- * indistinguishable from a plain first page load — the silent loop this marker
- * exists to break.
+ * indistinguishable from a plain first page load.
  */
 const REDIRECT_MARKER_KEY = 'vault.auth.pending-redirect';
 const REDIRECT_MARKER_MAX_AGE_MS = 10 * 60_000;
+
+const NO_EMAIL_MESSAGE =
+	'This Google account did not share an email address with Vault, so it has nothing to look a shared vault up with. Some work, school, or admin-restricted Google accounts do this. Sign in with a personal Google account, for example a Gmail address.';
 
 let authUnsubscribe: Unsubscribe | undefined;
 let authStarted = false;
 let redirectWatchdog: ReturnType<typeof setTimeout> | undefined;
 let pageShowHandler: (() => void) | undefined;
 let lastRedirectError: string | null = null;
+
+/**
+ * Every auth outcome goes through here, so the pop-up path, the redirect path,
+ * and the session listener can never disagree about who is signed in.
+ */
+let authSequence = 0;
+
+async function applyUser(user: User | null, redirectError: string | null): Promise<void> {
+	const sequence = ++authSequence;
+
+	if (!user) {
+		if (sequence === authSequence) {
+			authState.set({ status: 'signed-out', user: null, email: null, error: redirectError });
+		}
+		return;
+	}
+
+	const email = await resolveAccountEmail(user);
+
+	if (sequence !== authSequence) {
+		// A newer auth event superseded this one.
+		return;
+	}
+
+	if (!email) {
+		console.info('[vault:auth] signed-in account has no usable email address', {
+			account: describeAccount(user)
+		});
+		authState.set({ status: 'error', user: null, email: null, error: NO_EMAIL_MESSAGE });
+		return;
+	}
+
+	authState.set({ status: 'signed-in', user, email, error: null });
+}
 
 function authErrorMessage(error: unknown): string {
 	const code = firebaseErrorCode(error);
@@ -194,7 +233,7 @@ export async function startAuthObserver(): Promise<void> {
 	}
 
 	authStarted = true;
-	authState.set({ status: 'loading', user: null, error: null });
+	authState.set({ status: 'loading', user: null, email: null, error: null });
 
 	try {
 		const { auth, authPersistenceReady } = getFirebaseClient();
@@ -207,29 +246,7 @@ export async function startAuthObserver(): Promise<void> {
 			auth,
 			(user) => {
 				clearRedirectWatchdog();
-
-				// Every Vault screen needs the account email: it selects the shared
-				// vault and it is what the security rules compare against. A session
-				// without an email must be an explicit error, never a silent blank
-				// screen somewhere further down the render tree.
-				const missingEmail = Boolean(user) && !hasUsableAccountEmail(user);
-
-				if (missingEmail) {
-					console.info('[vault:auth] signed-in account without an email address', {
-						uid: user?.uid,
-						provider: user?.providerData?.[0]?.providerId
-					});
-				}
-
-				authState.set({
-					status: missingEmail ? 'error' : user ? 'signed-in' : 'signed-out',
-					user: missingEmail ? null : user,
-					error: missingEmail
-						? 'Your Google account did not provide an email address. Sign in with a Google account that has an email, or tap Sign out and choose another account.'
-						: user
-							? null
-							: redirectError
-				});
+				void applyUser(user, redirectError);
 				redirectError = null;
 			},
 			(error) => {
@@ -237,6 +254,7 @@ export async function startAuthObserver(): Promise<void> {
 				authState.set({
 					status: 'error',
 					user: null,
+					email: null,
 					error: authErrorMessage(error)
 				});
 			}
@@ -253,6 +271,7 @@ export async function startAuthObserver(): Promise<void> {
 					const restoredError = await completePendingRedirect(currentAuth);
 
 					if (currentAuth.currentUser) {
+						await applyUser(currentAuth.currentUser, restoredError);
 						return;
 					}
 
@@ -270,6 +289,7 @@ export async function startAuthObserver(): Promise<void> {
 		authState.set({
 			status: 'error',
 			user: null,
+			email: null,
 			error: authErrorMessage(error)
 		});
 	}
@@ -310,7 +330,9 @@ export async function signInWithGoogle(): Promise<void> {
 	try {
 		const credential = await signInWithPopup(auth, googleProvider);
 		clearPendingRedirect();
-		authState.set({ status: 'signed-in', user: credential.user, error: null });
+		// Routed through the same guard as every other outcome: the pop-up path
+		// used to accept a user with no email and leave the app stuck.
+		await applyUser(credential.user, null);
 		return;
 	} catch (error) {
 		const code = firebaseErrorCode(error);

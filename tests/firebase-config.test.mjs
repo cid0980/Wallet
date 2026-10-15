@@ -70,3 +70,62 @@ test('a session without an email is rejected before it can blank the app', async
 	assert.equal(hasUsableAccountEmail(null), false);
 	assert.equal(hasUsableAccountEmail(undefined), false);
 });
+
+test('resolves the account email from the token when the record has none', async () => {
+	const { emailFromClaims, resolveAccountEmail, describeAccount } = await import(
+		'../src/lib/firebase/account.ts'
+	);
+
+	assert.equal(emailFromClaims({ email: 'cid@example.com' }), 'cid@example.com');
+	assert.equal(emailFromClaims({ email: '  cid@example.com  ' }), 'cid@example.com');
+	assert.equal(emailFromClaims({ email: 42 }), null);
+	assert.equal(emailFromClaims({}), null);
+	assert.equal(emailFromClaims(undefined), null);
+
+	// Record carries the email: never touch the token.
+	let tokenCalls = 0;
+	const withRecord = {
+		email: 'cid@example.com',
+		uid: 'uid-1',
+		providerData: [{ providerId: 'google.com' }],
+		getIdTokenResult: async () => {
+			tokenCalls += 1;
+			return { claims: { email: 'other@example.com' } };
+		}
+	};
+	assert.equal(await resolveAccountEmail(withRecord), 'cid@example.com');
+	assert.equal(tokenCalls, 0);
+
+	// Record has no email (the failing production case): fall back to claims.
+	const recordWithoutEmail = {
+		email: null,
+		uid: 'uid-2',
+		providerData: [{ providerId: 'google.com' }],
+		getIdTokenResult: async () => ({ claims: { email: 'partner@example.com' } })
+	};
+	assert.equal(await resolveAccountEmail(recordWithoutEmail), 'partner@example.com');
+
+	// Neither source has an email: the sign-in must be rejected, not looped.
+	const noEmailAnywhere = {
+		email: null,
+		uid: 'uid-3',
+		getIdTokenResult: async () => ({ claims: { sub: 'uid-3' } })
+	};
+	assert.equal(await resolveAccountEmail(noEmailAnywhere), null);
+	assert.equal(await resolveAccountEmail({ email: null }), null);
+	assert.equal(await resolveAccountEmail(null), null);
+
+	// A failing token lookup must not throw into the auth listener.
+	const brokenToken = {
+		email: '',
+		getIdTokenResult: async () => {
+			throw new Error('offline');
+		}
+	};
+	assert.equal(await resolveAccountEmail(brokenToken), null);
+
+	assert.match(describeAccount(recordWithoutEmail), /uid uid-2/);
+	assert.match(describeAccount(recordWithoutEmail), /google\.com/);
+	assert.match(describeAccount(recordWithoutEmail), /email missing/);
+	assert.equal(describeAccount(null), 'no account');
+});
