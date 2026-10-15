@@ -66,6 +66,7 @@
 	let confirmation: Confirmation | null = null;
 	let clientFilter: 'active' | 'all' = 'active';
 	let query = '';
+	let paymentProjectFilter: { id: string; name: string } | null = null;
 
 	let editingClient: ClientRecord | null = null;
 	let clientName = '';
@@ -155,11 +156,10 @@
 
 	$: needle = query.trim().toLowerCase();
 	$: filteredClients = needle ? shownClients.filter((client) => matches(needle, client.name, client.contact, client.notes)) : shownClients;
-	$: filteredPayments = needle
-		? $vaultData.payments.filter((payment) =>
-				matches(needle, payment.clientName, payment.note, partnerName(payment.partner), formatPaise(payment.amountPaise))
-			)
-		: $vaultData.payments;
+	$: filteredPayments = $vaultData.payments.filter((payment) =>
+		(!paymentProjectFilter || payment.projectId === paymentProjectFilter.id) &&
+		(!needle || matches(needle, payment.clientName, payment.projectName, payment.note, partnerName(payment.partner), formatPaise(payment.amountPaise)))
+	);
 	$: filteredExpenses = needle
 		? $vaultData.expenses.filter((expense) =>
 				matches(needle, expense.tags.join(' '), expense.clientName, expense.note, partnerName(expense.partner), formatPaise(expense.amountPaise))
@@ -242,6 +242,7 @@
 		composer = 'none';
 		actionError = null;
 		query = '';
+		paymentProjectFilter = null;
 	}
 
 	function openClientComposer(client: ClientRecord | null = null): void {
@@ -253,7 +254,7 @@
 		composer = 'client';
 	}
 
-	function openPaymentComposer(payment: PaymentRecord | null = null): void {
+	function openPaymentComposer(payment: PaymentRecord | null = null, project: ProjectRecord | null = null): void {
 		actionError = null;
 
 		if (!payment && activeClients.length === 0) {
@@ -264,14 +265,19 @@
 		}
 
 		editingPayment = payment;
-		paymentClientId = payment?.clientId ?? activeClients[0]?.id ?? '';
-		paymentProjectId = payment?.projectId ?? '';
+		paymentClientId = payment?.clientId ?? project?.clientId ?? activeClients[0]?.id ?? '';
+		paymentProjectId = payment?.projectId ?? project?.id ?? '';
 		paymentAmount = payment ? formatPaiseInput(payment.amountPaise) : '';
 		paymentPartner = payment?.partner ?? ownPartner;
 		paymentDate = payment?.occurredOn ?? todayDateKey();
 		paymentDateMode = dateModeFor(paymentDate);
 		paymentNote = payment?.note ?? '';
 		composer = 'payment';
+	}
+
+	function viewProjectPayments(project: ProjectRecord): void {
+		switchTab('payments');
+		paymentProjectFilter = { id: project.id, name: project.name };
 	}
 
 	function openExpenseComposer(expense: ExpenseRecord | null = null): void {
@@ -476,14 +482,6 @@
 				say(`${project.name} is complete — the estimate is fully received.`);
 			});
 		}
-	}
-
-	function toggleProjectStatus(project: ProjectRecord): void {
-		const completing = project.status !== 'done';
-		void runAction(async () => {
-			await setProjectStatus(vault.id, project.id, completing ? 'done' : 'active', user.email ?? '');
-			say(completing ? `${project.name} marked complete.` : `${project.name} reopened.`);
-		});
 	}
 
 	function removeProject(project: ProjectRecord): void {
@@ -709,6 +707,9 @@
 									<p class="row__meta">{project.clientName}</p>
 									<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
 									<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
+									{#if !covered && project.estimatedPaise > 0}
+										<p class="project-remaining num">{formatPaise(Math.max(0, project.estimatedPaise - paid))} still to collect</p>
+									{/if}
 								</div>
 								<div class="row__side">
 									{#if covered || project.status === 'done'}
@@ -863,6 +864,7 @@
 				<div class="list">
 					{#each filteredProjects as project (project.id)}
 						{@const paid = paidByProject[project.id] ?? 0}
+						{@const paymentCount = $vaultData.payments.filter((payment) => payment.projectId === project.id).length}
 						{@const covered = project.estimatedPaise > 0 && paid >= project.estimatedPaise}
 						<article class="row">
 							<span class="row__icon" class:row__icon--in={covered || project.status === 'done'} aria-hidden="true"><Icon name="target" size={19} /></span>
@@ -871,6 +873,17 @@
 								<p class="row__meta">{project.clientName} · estimated {formatPaise(project.estimatedPaise)}</p>
 								<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
 								<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
+								{#if project.estimatedPaise > 0 && !covered}
+									<p class="project-remaining num">{formatPaise(Math.max(0, project.estimatedPaise - paid))} still to collect</p>
+								{/if}
+								<div class="project-actions">
+									{#if !covered}
+										<button class="btn btn--outline btn--sm" type="button" onclick={() => openPaymentComposer(null, project)}><Icon name="plus" size={16} /> Add payment</button>
+									{/if}
+									{#if paymentCount > 0}
+										<button class="btn btn--quiet btn--sm" type="button" onclick={() => viewProjectPayments(project)}>View {paymentCount} payment{paymentCount === 1 ? '' : 's'}</button>
+									{/if}
+								</div>
 								{#if project.note}<p class="row__note">{project.note}</p>{/if}
 								<p class="tiny">Last edited by {project.updatedBy} · {formatDateTime(project.updatedAt)}</p>
 							</div>
@@ -883,9 +896,6 @@
 								<div class="row__tools">
 									<button class="tool" type="button" onclick={() => openProjectComposer(project)} aria-label={`Edit ${project.name}`}>
 										<Icon name="pencil" size={16} />
-									</button>
-									<button class="tool" type="button" onclick={() => toggleProjectStatus(project)} aria-label={`${project.status === 'done' ? 'Reopen' : 'Mark complete'} ${project.name}`}>
-										<Icon name={project.status === 'done' ? 'refresh' : 'check'} size={16} />
 									</button>
 									<button class="tool tool--danger" type="button" onclick={() => removeProject(project)} aria-label={`Delete ${project.name}`}>
 										<Icon name="trash" size={16} />
@@ -913,6 +923,13 @@
 					<Icon name="plus" size={17} /> Add
 				</button>
 			</section>
+
+			{#if paymentProjectFilter}
+				<div class="payment-filter" role="status">
+					<span>Payments for <strong>{paymentProjectFilter.name}</strong></span>
+					<button class="btn btn--quiet btn--sm" type="button" onclick={() => (paymentProjectFilter = null)}>Show all payments</button>
+				</div>
+			{/if}
 
 			{#if $vaultData.payments.length > 4}
 				<label class="search mt-14">
@@ -1132,6 +1149,7 @@
 								<span class="amount-field__sign" aria-hidden="true">₹</span>
 								<input bind:value={paymentAmount} inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount received in rupees" required disabled={actionBusy} />
 							</label>
+							<p class="hint">Enter what you received today, not the full project estimate. Add another payment whenever the next installment arrives.</p>
 						</div>
 
 						<div class="field">
@@ -1145,7 +1163,7 @@
 								<ChipGroup label="Project for this payment" options={[{ value: '', label: 'No project' }, ...$vaultData.projects.map((project) => ({ value: project.id, label: project.name }))]} value={paymentProjectId} disabled={actionBusy} onChange={(value) => { paymentProjectId = value; const project = $vaultData.projects.find((entry) => entry.id === value); if (project) paymentClientId = project.clientId; }} />
 								{#if selectedPaymentProject}
 									<p class="hint">
-										Counts toward {selectedPaymentProject.name} · {formatPaise(paidByProject[selectedPaymentProject.id] ?? 0)} of {formatPaise(selectedPaymentProject.estimatedPaise)} received.
+										Adds to {selectedPaymentProject.name} · {formatPaise(paidByProject[selectedPaymentProject.id] ?? 0)} received so far of {formatPaise(selectedPaymentProject.estimatedPaise)} estimated. Partial payments are welcome.
 									</p>
 								{/if}
 							</div>
@@ -1197,7 +1215,7 @@
 								<span class="amount-field__sign" aria-hidden="true">₹</span>
 								<input bind:value={projectEstimate} inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Estimated price in rupees" required disabled={actionBusy} />
 							</label>
-							<p class="hint">When payments for this project reach the estimate, Vault marks it complete.</p>
+							<p class="hint">Record each installment as it arrives. Vault adds them up and marks the project complete when the received total reaches this estimate.</p>
 						</div>
 
 						<label class="field">

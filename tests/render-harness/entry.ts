@@ -191,6 +191,13 @@ const scenarios: Scenario[] = [
 		expect: 'received of'
 	},
 	{
+		name: 'partial project payments show the amount left',
+		auth: { status: 'signed-in', user, email: user.email, error: null },
+		session: { status: 'ready', vault },
+		data: busyData,
+		expect: 'still to collect'
+	},
+	{
 		name: 'project closes in on its estimate',
 		auth: { status: 'signed-in', user, email: user.email, error: null },
 		session: { status: 'ready', vault },

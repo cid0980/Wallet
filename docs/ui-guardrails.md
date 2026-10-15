@@ -1,6 +1,6 @@
 # Vault UI guardrails
 
-These apply to every new screen and interaction. Vault is a Svelte app, so its internal primitives—not React/shadcn components—are the component library. Do not add an external UI kit or make an operating-system picker the default interaction.
+These apply to every new screen and interaction. Five project-local agent skills live in `.agents/skills/` and are loaded via `AGENTS.md` (locally authored adaptations, not the original same-name packages). Vault is a Svelte app, so its internal primitives—not React/shadcn components—are the component library. Do not add an external UI kit or make an operating-system picker the default interaction.
 
 ## 1. Component architecture
 

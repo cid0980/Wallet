@@ -1862,3 +1862,36 @@ code {
 	flex: 1;
 	min-height: 44px;
 }
+
+/* Project collection: make partial payments and the next step easy to scan. */
+.project-remaining {
+	color: var(--brand-ink);
+	font-size: 0.86rem;
+	font-weight: 800;
+}
+
+.project-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.payment-filter {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 14px 0;
+	border: 1px solid var(--line-2);
+	border-radius: var(--r-md);
+	padding: 8px 12px;
+	background: var(--surface);
+	color: var(--ink-2);
+	font-size: 0.84rem;
+}
+
+.payment-filter strong {
+	color: var(--ink);
+}
