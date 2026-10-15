@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 
 	import PwaUpdatePrompt from '$lib/components/app/PwaUpdatePrompt.svelte';
+	import SkeletonList from '$lib/components/ui/SkeletonList.svelte';
 	import VaultWorkspace from '$lib/components/app/VaultWorkspace.svelte';
 	import EmailLogin from '$lib/components/auth/EmailLogin.svelte';
 	import VaultSetupForm from '$lib/components/setup/VaultSetupForm.svelte';
@@ -337,9 +338,9 @@
 					</div>
 				</section>
 			{:else if $vaultSession.status === 'ready' && $vaultSession.vault && ($vaultData.status === 'loading' || $vaultData.status === 'idle')}
-				<div class="card card--pad narrow loader" aria-live="polite">
-					<span class="spinner" aria-hidden="true"></span>
-					<p class="muted">Loading your shared records…</p>
+				<div class="card card--pad narrow" aria-busy="true">
+					<p class="muted mb-14">Loading your shared records…</p>
+					<SkeletonList label="Loading your shared records…" />
 				</div>
 			{:else if $vaultData.status === 'error'}
 				<section class="card card--pad narrow" aria-labelledby="data-title">

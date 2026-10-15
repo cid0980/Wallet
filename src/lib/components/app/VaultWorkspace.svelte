@@ -2,6 +2,11 @@
 	import type { User } from 'firebase/auth';
 
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import ChipGroup from '$lib/components/ui/ChipGroup.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import Progress from '$lib/components/ui/Progress.svelte';
+	import Sheet from '$lib/components/ui/Sheet.svelte';
+	import ToastMessage from '$lib/components/ui/Toast.svelte';
 	import {
 		createClient,
 		createExpense,
@@ -305,14 +310,6 @@
 		actionError = null;
 	}
 
-	function closeOverlays(): void {
-		if (confirmation) {
-			confirmation = null;
-			return;
-		}
-
-		closeComposer();
-	}
 
 	async function runAction(action: () => Promise<void>): Promise<void> {
 		actionBusy = true;
@@ -579,24 +576,11 @@
 		return mutation.recordType === 'payment' ? 'money-in' : 'money-out';
 	}
 
-	function projectProgress(paid: number, estimated: number): number {
-		if (estimated <= 0) {
-			return 0;
-		}
-
-		return Math.min(100, Math.round((paid / estimated) * 100));
-	}
 </script>
 
-<svelte:window
-	onkeydown={(event) => {
-		if (event.key === 'Escape') {
-			closeOverlays();
-		}
-	}}
-/>
 
 <div class="shell">
+	<a class="skip-link" href="#vault-main">Skip to content</a>
 	<header class="app-head">
 		<div class="app-head__brand">
 			<span class="app-head__logo" aria-hidden="true">{vault.name.trim().slice(0, 1).toUpperCase() || 'V'}</span>
@@ -607,11 +591,11 @@
 		</div>
 		<div class="app-head__side">
 			{#if isOffline}
-				<span class="status status--offline"><span class="status__dot" aria-hidden="true"></span>Offline</span>
+				<span class="status status--offline" role="status"><span class="status__dot" aria-hidden="true"></span>Offline</span>
 			{:else if isSyncing}
-				<span class="status"><span class="status__dot" aria-hidden="true"></span>Saving</span>
+				<span class="status" role="status"><span class="status__dot" aria-hidden="true"></span>Saving</span>
 			{:else}
-				<span class="status status--live"><span class="status__dot" aria-hidden="true"></span>Synced</span>
+				<span class="status status--live" role="status"><span class="status__dot" aria-hidden="true"></span>Synced</span>
 			{/if}
 			<button
 				class="avatar"
@@ -655,7 +639,7 @@
 		</button>
 	</nav>
 
-	<main>
+	<main id="vault-main" tabindex="-1">
 		{#if activeTab === 'home'}
 			<section class="between">
 				<div class="section__title">
@@ -670,35 +654,36 @@
 				<p class="hero__note">
 					{balance < 0 ? 'Expenses are above recorded payments' : 'Payments received minus expenses paid'}
 				</p>
-				<dl class="hero__split">
-					<div>
-						<dt>Money in</dt>
-						<dd class="num">{formatPaise(vault.totals.earned)}</dd>
-					</div>
-					<div>
-						<dt>Money out</dt>
-						<dd class="num">{formatPaise(vault.totals.spent)}</dd>
-					</div>
+				<div class="hero__meter" role="img" aria-label={`${formatPaise(vault.totals.earned)} received, ${formatPaise(vault.totals.spent)} spent`}>
+					<span class="hero__meter-in" style={`width: ${vault.totals.earned + vault.totals.spent ? vault.totals.earned / (vault.totals.earned + vault.totals.spent) * 100 : 50}%`}></span>
+					<span class="hero__meter-out" style={`width: ${vault.totals.earned + vault.totals.spent ? vault.totals.spent / (vault.totals.earned + vault.totals.spent) * 100 : 50}%`}></span>
+				</div>
+				<dl class="hero__legend">
+					<div><dt><span class="dot dot--in" aria-hidden="true"></span> In</dt><dd class="num">{formatPaise(vault.totals.earned)}</dd></div>
+					<div><dt><span class="dot dot--out" aria-hidden="true"></span> Out</dt><dd class="num">{formatPaise(vault.totals.spent)}</dd></div>
 				</dl>
 			</section>
 
 			<section class="quick" aria-label="Add something new">
-				<button class="quick__btn" type="button" onclick={() => openPaymentComposer()}>
-					<span class="quick__icon" aria-hidden="true"><Icon name="money-in" size={19} /></span>
-					Record payment
+				<button class="quick__primary" type="button" onclick={() => openPaymentComposer()}>
+					<span class="quick__icon" aria-hidden="true"><Icon name="money-in" size={21} /></span>
+					<span class="quick__text"><strong>Record a payment</strong><small>Money received for your work</small></span>
+					<Icon name="arrow-right" size={19} />
 				</button>
-				<button class="quick__btn" type="button" onclick={() => openExpenseComposer()}>
-					<span class="quick__icon quick__icon--out" aria-hidden="true"><Icon name="money-out" size={19} /></span>
-					Add expense
-				</button>
-				<button class="quick__btn" type="button" onclick={() => openClientComposer()}>
-					<span class="quick__icon" aria-hidden="true"><Icon name="plus" size={19} /></span>
-					New client
-				</button>
-				<button class="quick__btn" type="button" onclick={() => openProjectComposer()}>
-					<span class="quick__icon" aria-hidden="true"><Icon name="target" size={19} /></span>
-					New project
-				</button>
+				<div class="quick__row">
+					<button class="quick__btn" type="button" onclick={() => openExpenseComposer()}>
+						<span class="quick__icon quick__icon--out" aria-hidden="true"><Icon name="money-out" size={19} /></span>
+						Add expense
+					</button>
+					<button class="quick__btn" type="button" onclick={() => openClientComposer()}>
+						<span class="quick__icon" aria-hidden="true"><Icon name="plus" size={19} /></span>
+						New client
+					</button>
+					<button class="quick__btn" type="button" onclick={() => openProjectComposer()}>
+						<span class="quick__icon" aria-hidden="true"><Icon name="target" size={19} /></span>
+						New project
+					</button>
+				</div>
 			</section>
 
 			<section class="section">
@@ -722,9 +707,7 @@
 								<div class="row__body">
 									<p class="row__title">{project.name}</p>
 									<p class="row__meta">{project.clientName}</p>
-									<div class="progress" aria-hidden="true">
-										<span class="progress__fill" style={`width: ${projectProgress(paid, project.estimatedPaise)}%`}></span>
-									</div>
+									<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
 									<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
 								</div>
 								<div class="row__side">
@@ -738,12 +721,7 @@
 						{/each}
 					</div>
 				{:else}
-					<div class="empty">
-						<span class="empty__icon" aria-hidden="true"><Icon name="target" size={22} /></span>
-						<h3 class="h3">No projects yet</h3>
-						<p>Add a project with an estimated price. When payments reach it, Vault marks the project complete.</p>
-						<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button>
-					</div>
+					<EmptyState icon="target" title="No projects yet" message="Add a project with an estimated price. When payments reach it, Vault marks the project complete."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button></EmptyState>
 				{/if}
 			</section>
 
@@ -754,39 +732,24 @@
 						<h2 class="h2">Split by partner</h2>
 					</div>
 				</div>
-				<div class="grid-2">
-					<article class="partner">
-						<div class="partner__head">
-							<span class="avatar" aria-hidden="true">{initial(vault.members.a.name)}</span>
-							<span class="partner__name">{vault.members.a.name}</span>
-						</div>
-						<dl class="partner__figures">
-							<div>
-								<dt>Received</dt>
-								<dd class="num">{formatPaise(vault.totals.a.received)}</dd>
+				<div class="split">
+					{#each ['a', 'b'] as partner (partner)}
+						{@const member = partner === 'a' ? vault.members.a : vault.members.b}
+						{@const figures = partner === 'a' ? vault.totals.a : vault.totals.b}
+						<article class="split__row" class:split__row--b={partner === 'b'}>
+							<span class="avatar" class:avatar--b={partner === 'b'} aria-hidden="true">{initial(member.name)}</span>
+							<div class="split__body">
+							<div class="split__name">{member.name}<span>{partner === ownPartner ? 'You' : 'Partner'}</span></div>
+							<div class="split__bar" role="img" aria-label={`${member.name}: ${formatPaise(figures.received)} received, ${formatPaise(figures.spent)} spent`}>
+								<span class="split__fill" style={`width: ${Math.min(100, figures.received + figures.spent ? figures.received / (figures.received + figures.spent) * 100 : 0)}%`}></span>
 							</div>
-							<div>
-								<dt>Spent</dt>
-								<dd class="num">{formatPaise(vault.totals.a.spent)}</dd>
+							<dl class="split__figures">
+								<div><dt>Received</dt><dd class="num">{formatPaise(figures.received)}</dd></div>
+								<div><dt>Spent</dt><dd class="num">{formatPaise(figures.spent)}</dd></div>
+							</dl>
 							</div>
-						</dl>
-					</article>
-					<article class="partner">
-						<div class="partner__head">
-							<span class="avatar avatar--b" aria-hidden="true">{initial(vault.members.b.name)}</span>
-							<span class="partner__name">{vault.members.b.name}</span>
-						</div>
-						<dl class="partner__figures">
-							<div>
-								<dt>Received</dt>
-								<dd class="num">{formatPaise(vault.totals.b.received)}</dd>
-							</div>
-							<div>
-								<dt>Spent</dt>
-								<dd class="num">{formatPaise(vault.totals.b.spent)}</dd>
-							</div>
-						</dl>
-					</article>
+						</article>
+					{/each}
 				</div>
 			</section>
 
@@ -820,12 +783,7 @@
 						{/each}
 					</div>
 				{:else}
-					<div class="empty">
-						<span class="empty__icon" aria-hidden="true"><Icon name="history" size={22} /></span>
-						<h3 class="h3">Nothing recorded yet</h3>
-						<p>Every payment and expense you add shows up here, so you both always know what changed.</p>
-						<button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record the first payment</button>
-					</div>
+					<EmptyState icon="history" title="Nothing recorded yet" message="Every payment and expense you add shows up here, so you both always know what changed."><button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record the first payment</button></EmptyState>
 				{/if}
 			</section>
 		{:else if activeTab === 'clients'}
@@ -841,14 +799,7 @@
 			</section>
 
 			<div class="between">
-				<div class="chips" role="radiogroup" aria-label="Which clients to show">
-					<button class="chip" class:chip--on={clientFilter === 'active'} type="button" role="radio" aria-checked={clientFilter === 'active'} onclick={() => (clientFilter = 'active')}>
-						Active · {activeClients.length}
-					</button>
-					<button class="chip" class:chip--on={clientFilter === 'all'} type="button" role="radio" aria-checked={clientFilter === 'all'} onclick={() => (clientFilter = 'all')}>
-						All · {$vaultData.clients.length}
-					</button>
-				</div>
+				<ChipGroup label="Which clients to show" options={[{ value: 'active', label: `Active · ${activeClients.length}` }, { value: 'all', label: `All · ${$vaultData.clients.length}` }]} value={clientFilter} onChange={(value) => (clientFilter = value as 'active' | 'all')} />
 			</div>
 
 			{#if $vaultData.clients.length > 4}
@@ -884,18 +835,9 @@
 						{/each}
 					</div>
 				{:else if needle}
-					<div class="empty">
-						<span class="empty__icon" aria-hidden="true"><Icon name="search" size={22} /></span>
-						<h3 class="h3">No clients match “{query}”</h3>
-						<button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button>
-					</div>
+					<EmptyState icon="search" title={`No clients match “${query}”`}><button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button></EmptyState>
 				{:else}
-					<div class="empty">
-						<span class="empty__icon" aria-hidden="true"><Icon name="clients" size={22} /></span>
-						<h3 class="h3">No clients yet</h3>
-						<p>Add the people or companies who pay you. You can record a payment as soon as one exists.</p>
-						<button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add your first client</button>
-					</div>
+					<EmptyState icon="clients" title="No clients yet" message="Add the people or companies who pay you. You can record a payment as soon as one exists."><button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add your first client</button></EmptyState>
 				{/if}
 			</section>
 		{:else if activeTab === 'projects'}
@@ -927,9 +869,7 @@
 							<div class="row__body">
 								<p class="row__title">{project.name}</p>
 								<p class="row__meta">{project.clientName} · estimated {formatPaise(project.estimatedPaise)}</p>
-								<div class="progress" role="img" aria-label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`}>
-									<span class="progress__fill" style={`width: ${projectProgress(paid, project.estimatedPaise)}%`}></span>
-								</div>
+								<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
 								<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
 								{#if project.note}<p class="row__note">{project.note}</p>{/if}
 								<p class="tiny">Last edited by {project.updatedBy} · {formatDateTime(project.updatedAt)}</p>
@@ -956,18 +896,9 @@
 					{/each}
 				</div>
 			{:else if needle}
-				<div class="empty">
-					<span class="empty__icon" aria-hidden="true"><Icon name="search" size={22} /></span>
-					<h3 class="h3">No projects match “{query}”</h3>
-					<button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button>
-				</div>
+				<EmptyState icon="search" title={`No projects match “${query}”`}><button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button></EmptyState>
 			{:else}
-				<div class="empty">
-					<span class="empty__icon" aria-hidden="true"><Icon name="target" size={22} /></span>
-					<h3 class="h3">No projects yet</h3>
-					<p>One client can carry several projects. Give each one an estimated price and track payments against it.</p>
-					<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add your first project</button>
-				</div>
+				<EmptyState icon="target" title="No projects yet" message="One client can carry several projects. Give each one an estimated price and track payments against it."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add your first project</button></EmptyState>
 			{/if}
 		{:else if activeTab === 'payments'}
 			<section class="section__head">
@@ -1017,18 +948,9 @@
 					{/each}
 				</div>
 			{:else if needle}
-				<div class="empty">
-					<span class="empty__icon" aria-hidden="true"><Icon name="search" size={22} /></span>
-					<h3 class="h3">No payments match “{query}”</h3>
-					<button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button>
-				</div>
+				<EmptyState icon="search" title={`No payments match “${query}”`}><button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button></EmptyState>
 			{:else}
-				<div class="empty">
-					<span class="empty__icon" aria-hidden="true"><Icon name="money-in" size={22} /></span>
-					<h3 class="h3">No payments recorded</h3>
-					<p>Record what a client paid, and the shared balance updates for both of you instantly.</p>
-					<button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record payment</button>
-				</div>
+				<EmptyState icon="money-in" title="No payments recorded" message="Record what a client paid, and the shared balance updates for both of you instantly."><button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record payment</button></EmptyState>
 			{/if}
 		{:else if activeTab === 'expenses'}
 			<section class="section__head">
@@ -1078,18 +1000,9 @@
 					{/each}
 				</div>
 			{:else if needle}
-				<div class="empty">
-					<span class="empty__icon" aria-hidden="true"><Icon name="search" size={22} /></span>
-					<h3 class="h3">No expenses match “{query}”</h3>
-					<button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button>
-				</div>
+				<EmptyState icon="search" title={`No expenses match “${query}”`}><button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button></EmptyState>
 			{:else}
-				<div class="empty">
-					<span class="empty__icon" aria-hidden="true"><Icon name="money-out" size={22} /></span>
-					<h3 class="h3">No expenses recorded</h3>
-					<p>Track what either of you paid out, so the profit split stays honest.</p>
-					<button class="btn btn--primary btn--sm" type="button" onclick={() => openExpenseComposer()}>Add expense</button>
-				</div>
+				<EmptyState icon="money-out" title="No expenses recorded" message="Track what either of you paid out, so the profit split stays honest."><button class="btn btn--primary btn--sm" type="button" onclick={() => openExpenseComposer()}>Add expense</button></EmptyState>
 			{/if}
 		{:else}
 			<section class="section__head">
@@ -1099,14 +1012,7 @@
 				</div>
 			</section>
 
-			<div class="chips" role="radiogroup" aria-label="More sections">
-				<button class="chip" class:chip--on={morePanel === 'history'} type="button" role="radio" aria-checked={morePanel === 'history'} onclick={() => (morePanel = 'history')}>
-					<Icon name="history" size={17} /> History
-				</button>
-				<button class="chip" class:chip--on={morePanel === 'settings'} type="button" role="radio" aria-checked={morePanel === 'settings'} onclick={() => (morePanel = 'settings')}>
-					<Icon name="info" size={17} /> Settings
-				</button>
-			</div>
+			<ChipGroup label="More sections" options={[{ value: 'history', label: 'History', icon: 'history' }, { value: 'settings', label: 'Settings', icon: 'info' }]} value={morePanel} onChange={(value) => (morePanel = value as MorePanel)} />
 
 			<section class="section">
 				{#if morePanel === 'history'}
@@ -1129,11 +1035,7 @@
 							{/each}
 						</div>
 					{:else}
-						<div class="empty">
-							<span class="empty__icon" aria-hidden="true"><Icon name="history" size={22} /></span>
-							<h3 class="h3">No history yet</h3>
-							<p>Every change is logged with who made it and when, so nothing is a mystery later.</p>
-						</div>
+						<EmptyState icon="history" title="No history yet" message="Every change is logged with who made it and when, so nothing is a mystery later." />
 					{/if}
 				{:else}
 					<div class="list">
@@ -1194,38 +1096,13 @@
 </div>
 
 {#if composer !== 'none'}
-	<button class="backdrop" type="button" aria-label="Close form" onclick={closeComposer}></button>
-
-	<dialog open class="sheet" aria-labelledby="composer-title">
-		<header class="sheet__head">
-			<div>
-				<p class="eyebrow">
-					{composer === 'client' ? 'Client' : composer === 'payment' ? 'Money in' : composer === 'project' ? 'Project' : 'Money out'}
-				</p>
-				<h2 class="h2" id="composer-title">
-					{composer === 'client'
-						? editingClient
-							? 'Edit client'
-							: 'New client'
-						: composer === 'payment'
-							? editingPayment
-								? 'Edit payment'
-								: 'Record a payment'
-							: composer === 'project'
-								? editingProject
-									? 'Edit project'
-									: 'New project'
-								: editingExpense
-									? 'Edit expense'
-									: 'Add an expense'}
-				</h2>
-			</div>
-			<button class="icon-btn" type="button" aria-label="Close form" disabled={actionBusy} onclick={closeComposer}>
-				<Icon name="close" size={20} />
-			</button>
-		</header>
-
-		<div class="sheet__body">
+	<Sheet
+		closeLabel="Close form"
+		busy={actionBusy}
+		onClose={closeComposer}
+		eyebrow={composer === 'client' ? 'Client' : composer === 'payment' ? 'Money in' : composer === 'project' ? 'Project' : 'Money out'}
+		title={composer === 'client' ? editingClient ? 'Edit client' : 'New client' : composer === 'payment' ? editingPayment ? 'Edit payment' : 'Record a payment' : composer === 'project' ? editingProject ? 'Edit project' : 'New project' : editingExpense ? 'Edit expense' : 'Add an expense'}
+	>
 			{#if composer === 'client'}
 				<form class="form" onsubmit={(event) => void saveClient(event)}>
 					<label class="field">
@@ -1246,12 +1123,7 @@
 				</form>
 			{:else if composer === 'payment'}
 				{#if !activeClients.length}
-					<div class="empty">
-						<span class="empty__icon" aria-hidden="true"><Icon name="clients" size={22} /></span>
-						<h3 class="h3">Add a client first</h3>
-						<p>A payment has to be linked to the client who paid it.</p>
-						<button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add a client</button>
-					</div>
+					<EmptyState icon="clients" title="Add a client first" message="A payment has to be linked to the client who paid it."><button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add a client</button></EmptyState>
 				{:else}
 					<form class="form" onsubmit={(event) => void savePayment(event)}>
 						<div class="field">
@@ -1264,39 +1136,13 @@
 
 						<div class="field">
 							<span class="field__label">Client</span>
-							<div class="chips" role="radiogroup" aria-label="Client">
-								{#each paymentClientOptions as option (option.value)}
-									<button class="chip" class:chip--on={paymentClientId === option.value} type="button" role="radio" aria-checked={paymentClientId === option.value} disabled={actionBusy} onclick={() => (paymentClientId = option.value)}>
-										{option.label}
-									</button>
-								{/each}
-							</div>
+							<ChipGroup label="Client" options={paymentClientOptions} value={paymentClientId} disabled={actionBusy} onChange={(value) => { paymentClientId = value; if (selectedPaymentProject && selectedPaymentProject.clientId !== value) paymentProjectId = ''; }} />
 						</div>
 
 						{#if $vaultData.projects.length}
 							<div class="field">
 								<span class="field__label">Project <em class="field__optional">optional</em></span>
-								<div class="chips" role="radiogroup" aria-label="Project for this payment">
-									<button class="chip" class:chip--on={paymentProjectId === ''} type="button" role="radio" aria-checked={paymentProjectId === ''} disabled={actionBusy} onclick={() => (paymentProjectId = '')}>
-										No project
-									</button>
-									{#each $vaultData.projects as project (project.id)}
-										<button
-											class="chip"
-											class:chip--on={paymentProjectId === project.id}
-											type="button"
-											role="radio"
-											aria-checked={paymentProjectId === project.id}
-											disabled={actionBusy}
-											onclick={() => {
-												paymentProjectId = project.id;
-												paymentClientId = project.clientId;
-											}}
-										>
-											{project.name}
-										</button>
-									{/each}
-								</div>
+								<ChipGroup label="Project for this payment" options={[{ value: '', label: 'No project' }, ...$vaultData.projects.map((project) => ({ value: project.id, label: project.name }))]} value={paymentProjectId} disabled={actionBusy} onChange={(value) => { paymentProjectId = value; const project = $vaultData.projects.find((entry) => entry.id === value); if (project) paymentClientId = project.clientId; }} />
 								{#if selectedPaymentProject}
 									<p class="hint">
 										Counts toward {selectedPaymentProject.name} · {formatPaise(paidByProject[selectedPaymentProject.id] ?? 0)} of {formatPaise(selectedPaymentProject.estimatedPaise)} received.
@@ -1307,23 +1153,12 @@
 
 						<div class="field">
 							<span class="field__label">Received by</span>
-							<div class="chips" role="radiogroup" aria-label="Received by">
-								{#each partnerOptions as option (option.value)}
-									<button class="chip" class:chip--on={paymentPartner === option.value} type="button" role="radio" aria-checked={paymentPartner === option.value} disabled={actionBusy} onclick={() => (paymentPartner = option.value as PartnerKey)}>
-										<span class="chip__dot" aria-hidden="true">{option.initial}</span>
-										{option.label}
-									</button>
-								{/each}
-							</div>
+							<ChipGroup label="Received by" options={partnerOptions} value={paymentPartner} disabled={actionBusy} onChange={(value) => (paymentPartner = value as PartnerKey)} />
 						</div>
 
 						<div class="field">
 							<span class="field__label">Date</span>
-							<div class="chips" role="radiogroup" aria-label="Payment date">
-								<button class="chip" class:chip--on={paymentDateMode === 'today'} type="button" role="radio" aria-checked={paymentDateMode === 'today'} disabled={actionBusy} onclick={() => pickDate('today', 'payment')}>Today</button>
-								<button class="chip" class:chip--on={paymentDateMode === 'yesterday'} type="button" role="radio" aria-checked={paymentDateMode === 'yesterday'} disabled={actionBusy} onclick={() => pickDate('yesterday', 'payment')}>Yesterday</button>
-								<button class="chip" class:chip--on={paymentDateMode === 'custom'} type="button" role="radio" aria-checked={paymentDateMode === 'custom'} disabled={actionBusy} onclick={() => pickDate('custom', 'payment')}>Another day</button>
-							</div>
+							<ChipGroup label="Payment date" options={[{ value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' }, { value: 'custom', label: 'Another day' }]} value={paymentDateMode} disabled={actionBusy} onChange={(value) => pickDate(value as DateMode, 'payment')} />
 							{#if paymentDateMode === 'custom'}
 								<input class="input" bind:value={paymentDate} type="date" aria-label="Payment date" required disabled={actionBusy} />
 							{:else}
@@ -1343,12 +1178,7 @@
 				{/if}
 			{:else if composer === 'project'}
 				{#if !activeClients.length}
-					<div class="empty">
-						<span class="empty__icon" aria-hidden="true"><Icon name="clients" size={22} /></span>
-						<h3 class="h3">Add a client first</h3>
-						<p>A project belongs to the client who ordered the work.</p>
-						<button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add a client</button>
-					</div>
+					<EmptyState icon="clients" title="Add a client first" message="A project belongs to the client who ordered the work."><button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add a client</button></EmptyState>
 				{:else}
 					<form class="form" onsubmit={(event) => void saveProject(event)}>
 						<label class="field">
@@ -1358,13 +1188,7 @@
 
 						<div class="field">
 							<span class="field__label">Client</span>
-							<div class="chips" role="radiogroup" aria-label="Client for this project">
-								{#each activeClients as client (client.id)}
-									<button class="chip" class:chip--on={projectClientId === client.id} type="button" role="radio" aria-checked={projectClientId === client.id} disabled={actionBusy} onclick={() => (projectClientId = client.id)}>
-										{client.name}
-									</button>
-								{/each}
-							</div>
+							<ChipGroup label="Client for this project" options={activeClients.map((client) => ({ value: client.id, label: client.name }))} value={projectClientId} disabled={actionBusy} onChange={(value) => (projectClientId = value)} />
 						</div>
 
 						<div class="field">
@@ -1402,55 +1226,25 @@
 
 					<div class="field">
 						<span class="field__label">What it was for</span>
-						<div class="chips" aria-label="Spending tags">
-							{#each tagOptions as tag (tag)}
-								<button
-									class="chip"
-									class:chip--on={expenseTags.includes(tag)}
-									type="button"
-									aria-pressed={expenseTags.includes(tag)}
-									disabled={actionBusy}
-									onclick={() => toggleExpenseTag(tag)}
-								>
-									{tag}
-								</button>
-							{/each}
-						</div>
+						<ChipGroup label="Spending tags" options={tagOptions.map((tag) => ({ value: tag, label: tag }))} multiple values={expenseTags} disabled={actionBusy} onChange={toggleExpenseTag} />
 						<p class="hint">Pick one or more tags. You can add more in More → Settings.</p>
 					</div>
 
 					<div class="field">
 						<span class="field__label">Paid by</span>
-						<div class="chips" role="radiogroup" aria-label="Paid by">
-							{#each partnerOptions as option (option.value)}
-								<button class="chip" class:chip--on={expensePartner === option.value} type="button" role="radio" aria-checked={expensePartner === option.value} disabled={actionBusy} onclick={() => (expensePartner = option.value as PartnerKey)}>
-									<span class="chip__dot" aria-hidden="true">{option.initial}</span>
-									{option.label}
-								</button>
-							{/each}
-						</div>
+						<ChipGroup label="Paid by" options={partnerOptions} value={expensePartner} disabled={actionBusy} onChange={(value) => (expensePartner = value as PartnerKey)} />
 					</div>
 
 					{#if activeClients.length}
 						<div class="field">
 							<span class="field__label">For a client <em class="field__optional">optional</em></span>
-							<div class="chips" role="radiogroup" aria-label="Client for this expense">
-								{#each expenseClientOptions as option (option.value)}
-									<button class="chip" class:chip--on={expenseClientId === option.value} type="button" role="radio" aria-checked={expenseClientId === option.value} disabled={actionBusy} onclick={() => (expenseClientId = option.value)}>
-										{option.label}
-									</button>
-								{/each}
-							</div>
+							<ChipGroup label="Client for this expense" options={expenseClientOptions} value={expenseClientId} disabled={actionBusy} onChange={(value) => (expenseClientId = value)} />
 						</div>
 					{/if}
 
 					<div class="field">
 						<span class="field__label">Date</span>
-						<div class="chips" role="radiogroup" aria-label="Expense date">
-							<button class="chip" class:chip--on={expenseDateMode === 'today'} type="button" role="radio" aria-checked={expenseDateMode === 'today'} disabled={actionBusy} onclick={() => pickDate('today', 'expense')}>Today</button>
-							<button class="chip" class:chip--on={expenseDateMode === 'yesterday'} type="button" role="radio" aria-checked={expenseDateMode === 'yesterday'} disabled={actionBusy} onclick={() => pickDate('yesterday', 'expense')}>Yesterday</button>
-							<button class="chip" class:chip--on={expenseDateMode === 'custom'} type="button" role="radio" aria-checked={expenseDateMode === 'custom'} disabled={actionBusy} onclick={() => pickDate('custom', 'expense')}>Another day</button>
-						</div>
+						<ChipGroup label="Expense date" options={[{ value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' }, { value: 'custom', label: 'Another day' }]} value={expenseDateMode} disabled={actionBusy} onChange={(value) => pickDate(value as DateMode, 'expense')} />
 						{#if expenseDateMode === 'custom'}
 							<input class="input" bind:value={expenseDate} type="date" aria-label="Expense date" required disabled={actionBusy} />
 						{:else}
@@ -1472,34 +1266,21 @@
 			{#if actionError}
 				<p class="notice notice--error" role="alert">{actionError}</p>
 			{/if}
-		</div>
-	</dialog>
+	</Sheet>
 {/if}
 
 {#if confirmation}
-	<button class="backdrop" type="button" aria-label="Cancel" onclick={() => (confirmation = null)}></button>
-	<dialog open class="sheet sheet--dialog" aria-labelledby="confirm-title">
-		<header class="sheet__head">
-			<h2 class="h2" id="confirm-title">{confirmation.title}</h2>
-		</header>
-		<div class="sheet__body">
-			<p class="lead">{confirmation.message}</p>
-			<div class="grid-2">
-				<button class="btn btn--outline" type="button" disabled={actionBusy} onclick={() => (confirmation = null)}>Keep it</button>
-				<button class="btn btn--danger" type="button" disabled={actionBusy} onclick={() => void confirmAction()}>
-					{actionBusy ? 'Working…' : confirmation.confirmLabel}
-				</button>
-			</div>
+	<Sheet title={confirmation.title} variant="dialog" busy={actionBusy} onClose={() => (confirmation = null)}>
+		<p class="lead">{confirmation.message}</p>
+		<div class="grid-2">
+			<button class="btn btn--outline" type="button" disabled={actionBusy} onclick={() => (confirmation = null)}>Keep it</button>
+			<button class="btn btn--danger" type="button" disabled={actionBusy} onclick={() => void confirmAction()}>
+				{actionBusy ? 'Working…' : confirmation.confirmLabel}
+			</button>
 		</div>
-	</dialog>
+	</Sheet>
 {/if}
 
 {#if toast}
-	<p class="toast" class:toast--ok={toast.tone === 'ok'} class:toast--error={toast.tone === 'error'} role={toast.tone === 'error' ? 'alert' : 'status'}>
-		<span class="toast__icon" aria-hidden="true"><Icon name={toast.tone === 'error' ? 'warning' : 'check'} size={18} /></span>
-		<span>{toast.text}</span>
-		<button class="toast__close" type="button" aria-label="Dismiss message" onclick={dismissToast}>
-			<Icon name="close" size={16} />
-		</button>
-	</p>
+	<ToastMessage tone={toast.tone} text={toast.text} onDismiss={dismissToast} />
 {/if}

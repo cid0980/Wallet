@@ -52,6 +52,8 @@ type Scenario = {
 	data: unknown;
 	/** Text that must appear in the rendered page. */
 	expect?: string;
+	/** Semantic markup must survive the refactor, not just the visible text. */
+	expectMarkup?: string[];
 };
 
 const busyVault = {
@@ -174,10 +176,10 @@ const scenarios: Scenario[] = [
 	{ name: 'session loading', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'loading' }, data: { status: 'idle' }, expect: 'Finding your shared Vault' },
 	{ name: 'no-vault', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'no-vault' }, data: { status: 'idle' }, expect: 'Create the shared vault' },
 	{ name: 'session error', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'error', error: 'denied' }, data: { status: 'idle' }, expect: 'We could not open your Vault' },
-	{ name: 'records loading', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { status: 'loading' }, expect: 'Loading your shared records' },
+	{ name: 'records loading', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { status: 'loading' }, expect: 'Loading your shared records', expectMarkup: ['aria-busy="true"', 'class="skeleton-row"'] },
 	{ name: 'records error', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { status: 'error', error: 'denied' }, expect: 'We could not load your records' },
 	{ name: 'workspace', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'Available balance' },
-	{ name: 'workspace with records', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault: busyVault }, data: busyData, expect: 'Latest changes' },
+	{ name: 'workspace with records', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault: busyVault }, data: busyData, expect: 'Latest changes', expectMarkup: ['class="skip-link"', 'id="vault-main"', 'aria-label="Vault sections"', 'role="progressbar"'] },
 	{ name: 'empty workspace invites the first payment', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'Nothing recorded yet' },
 	{ name: 'offline workspace says so', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault: { ...busyVault, fromCache: true } }, data: { ...busyData, fromCache: true }, expect: 'Offline' },
 	{ name: 'no clients yet', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { ...busyData, clients: [], payments: [], mutations: [] }, expect: 'Latest changes' },
@@ -258,6 +260,13 @@ for (const scenario of scenarios) {
 		if (text.length === 0) {
 			failures.push(`${scenario.name}: rendered a blank page`);
 			lines.push(`BLANK !! | ${scenario.name}`);
+			continue;
+		}
+
+		if (scenario.expectMarkup?.some((fragment) => !body.includes(fragment))) {
+			const missing = scenario.expectMarkup.filter((fragment) => !body.includes(fragment));
+			failures.push(`${scenario.name}: missing semantic markup ${missing.join(', ')}`);
+			lines.push(`A11Y !! | ${scenario.name} | ${missing.join(', ')}`);
 			continue;
 		}
 

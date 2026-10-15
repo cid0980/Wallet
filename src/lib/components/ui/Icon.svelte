@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { IconName } from './icon-names';
+
 	/**
 	 * Inline icon set.
 	 *
@@ -7,34 +9,6 @@
 	 * each operating system, so the same screen looked different on two
 	 * phones. These paths are the same pixels everywhere.
 	 */
-	type IconName =
-		| 'home'
-		| 'clients'
-		| 'money-in'
-		| 'money-out'
-		| 'more'
-		| 'plus'
-		| 'close'
-		| 'search'
-		| 'check'
-		| 'check-circle'
-		| 'vault'
-		| 'sign-out'
-		| 'warning'
-		| 'refresh'
-		| 'history'
-		| 'calendar'
-		| 'tag'
-		| 'target'
-		| 'pencil'
-		| 'trash'
-		| 'chevron-right'
-		| 'arrow-right'
-		| 'inbox'
-		| 'info'
-		| 'copy'
-		| 'external';
-
 	export let name: IconName;
 	export let size = 20;
 	export let stroke = 1.8;
