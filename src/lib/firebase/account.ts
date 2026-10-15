@@ -35,6 +35,9 @@ export interface AccountInspection {
 	providerEmail: string | null;
 	claimsEmail: string | null;
 	claimKeys: string[];
+	/** The claims the Firestore rules test directly. */
+	emailVerified: boolean | 'missing' | 'not-boolean';
+	signInProvider: string | null;
 	tokenError: string | null;
 }
 
@@ -100,6 +103,9 @@ export async function inspectAccount(
 ): Promise<AccountInspection> {
 	const { claims, error } = await tokenClaims(user);
 
+	const verified = claims?.email_verified;
+	const firebaseClaim = claims?.firebase as { sign_in_provider?: unknown } | undefined;
+
 	return {
 		uid: user?.uid ?? null,
 		providers: (user?.providerData ?? [])
@@ -109,6 +115,13 @@ export async function inspectAccount(
 		providerEmail: emailFromProviderData(user),
 		claimsEmail: emailFromClaims(claims),
 		claimKeys: Object.keys(claims ?? {}).sort(),
+		// The published rules require email_verified == true and
+		// firebase.sign_in_provider == 'google.com'. Reporting both turns a
+		// permission-denied from the rules into a readable answer.
+		emailVerified:
+			verified === undefined ? 'missing' : typeof verified === 'boolean' ? verified : 'not-boolean',
+		signInProvider:
+			typeof firebaseClaim?.sign_in_provider === 'string' ? firebaseClaim.sign_in_provider : null,
 		tokenError: error
 	};
 }
@@ -122,6 +135,8 @@ export function formatInspection(inspection: AccountInspection): string {
 		`provider email: ${inspection.providerEmail ?? 'missing'}`,
 		`token email claim: ${inspection.claimsEmail ?? 'missing'}`,
 		`token claim keys: ${inspection.claimKeys.join(', ') || 'none'}`,
+		`token email_verified: ${inspection.emailVerified}`,
+		`token sign_in_provider: ${inspection.signInProvider ?? 'missing'}`,
 		`token lookup: ${inspection.tokenError ?? 'ok'}`
 	].join('\n');
 }

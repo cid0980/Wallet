@@ -8,12 +8,27 @@
 	let dismissed = false;
 
 	onMount(() => {
+		let reloading = false;
+
 		updateServiceWorker = registerSW({
+			immediate: true,
 			onOfflineReady() {
 				offlineReady = true;
 			},
 			onNeedRefresh() {
 				updateAvailable = true;
+
+				// Take the update instead of waiting for a tap. A cached old bundle
+				// once hid several real fixes from the person using the app. The
+				// guard keeps a single reload per page load.
+				if (!reloading) {
+					reloading = true;
+					void refresh();
+				}
+			},
+			onRegisteredSW(_swUrl, registration) {
+				// Re-check while the app stays open, so a long-lived tab updates too.
+				setInterval(() => void registration?.update(), 30 * 60 * 1000);
 			}
 		});
 	});

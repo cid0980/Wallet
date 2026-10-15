@@ -232,3 +232,60 @@ test('stored member emails match what Google tokens and the rules compare', asyn
 	// A capitalised address from the setup form would have missed both.
 	assert.notEqual(typedPartnerEmail.trim(), partnerTokenEmail);
 });
+
+test('access-check guidance maps each failure code to the right fix', async () => {
+	const { describeAccessProbe } = await import('../src/lib/firebase/access-probe.ts');
+
+	assert.match(describeAccessProbe('permission-denied'), /Rules deny this account at \/vaults/);
+	assert.match(describeAccessProbe('unavailable'), /could not be reached/);
+	assert.match(describeAccessProbe('failed-precondition'), /local storage/);
+	assert.match(describeAccessProbe('unknown-ish'), /unknown-ish/);
+});
+
+test('the inspection reports the exact claims the published rules test', async () => {
+	const { inspectAccount, formatInspection } = await import('../src/lib/firebase/account.ts');
+
+	// Claims as Google sends them: every condition in the rules passes.
+	const healthy = {
+		email: 'asencid07@gmail.com',
+		uid: 'uid-ok',
+		providerData: [{ providerId: 'google.com', email: 'asencid07@gmail.com' }],
+		getIdTokenResult: async () => ({
+			claims: {
+				email: 'asencid07@gmail.com',
+				email_verified: true,
+				firebase: { sign_in_provider: 'google.com' }
+			}
+		})
+	};
+
+	const healthyReport = await inspectAccount(healthy);
+	assert.equal(healthyReport.emailVerified, true);
+	assert.equal(healthyReport.signInProvider, 'google.com');
+	assert.match(formatInspection(healthyReport), /token email_verified: true/);
+	assert.match(formatInspection(healthyReport), /token sign_in_provider: google\.com/);
+	assert.match(formatInspection(healthyReport), /token email claim: asencid07@gmail\.com/);
+
+	// A token that would silently fail every rule must be visible as such.
+	const missingClaims = {
+		email: null,
+		uid: 'uid-bad',
+		providerData: [{ providerId: 'google.com', email: null }],
+		getIdTokenResult: async () => ({ claims: { email: 'asencid07@gmail.com' } })
+	};
+
+	const badReport = await inspectAccount(missingClaims);
+	assert.equal(badReport.emailVerified, 'missing');
+	assert.equal(badReport.signInProvider, null);
+	assert.match(formatInspection(badReport), /token email_verified: missing/);
+	assert.match(formatInspection(badReport), /token sign_in_provider: missing/);
+
+	// A non-boolean claim is reported as such rather than assumed true.
+	const stringy = {
+		email: 'a@b.com',
+		uid: 'uid-str',
+		providerData: [],
+		getIdTokenResult: async () => ({ claims: { email: 'a@b.com', email_verified: 'true' } })
+	};
+	assert.equal((await inspectAccount(stringy)).emailVerified, 'not-boolean');
+});

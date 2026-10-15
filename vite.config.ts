@@ -6,7 +6,7 @@ export default defineConfig({
 	plugins: [
 		sveltekit(),
 		SvelteKitPWA({
-			registerType: 'prompt',
+			registerType: 'autoUpdate',
 			injectRegister: false,
 			devOptions: {
 				enabled: false

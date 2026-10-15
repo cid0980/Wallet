@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 
 	import PwaUpdatePrompt from '$lib/components/app/PwaUpdatePrompt.svelte';
@@ -9,7 +10,12 @@
 		FIRESTORE_RULES_FILE_URL,
 		firestoreRulesConsoleUrl
 	} from '$lib/firebase/client';
-	import { createInitialVault, vaultErrorMessage } from '$lib/services/vault-bootstrap';
+	import { inspectAccount, formatInspection } from '$lib/firebase/account';
+	import {
+		createInitialVault,
+		probeVaultReadAccess,
+		vaultErrorMessage
+	} from '$lib/services/vault-bootstrap';
 	import { authState, signInWithGoogle, signOutOfVault, startAuthObserver, stopAuthObserver } from '$lib/stores/auth';
 	import { clearVaultData, observeVaultData, vaultData } from '$lib/stores/vault-data';
 	import {
@@ -26,8 +32,58 @@
 	let setupError: string | null = null;
 	let startupError: string | null = null;
 	let rulesFileCopied = false;
+	let accessCheckRunning = false;
+	let accessCheckSummary: string | null = null;
+	let accessCheckDetail: string | null = null;
 
 	const rulesConsoleUrl = firestoreRulesConsoleUrl();
+
+	/**
+	 * Runs when the vault lookup is refused: reads one document that never
+	 * exists and reports the token claims, so one screenshot says whether the
+	 * rules, the claims, or a stale cached bundle is at fault.
+	 */
+	async function runAccessCheck(): Promise<void> {
+		if (!browser || accessCheckRunning) {
+			return;
+		}
+
+		accessCheckRunning = true;
+		accessCheckSummary = null;
+		accessCheckDetail = null;
+
+		try {
+			const user = $authState.user;
+			const [probe, inspection] = await Promise.all([
+				probeVaultReadAccess(),
+				inspectAccount(user)
+			]);
+
+			const claims = formatInspection(inspection);
+			const verified =
+				inspection.emailVerified === true
+					? 'token email_verified: true ✓'
+					: `token email_verified: ${inspection.emailVerified} ✗ (the published rules require true)`;
+			const provider =
+				inspection.signInProvider === 'google.com'
+					? 'token sign_in_provider: google.com ✓'
+					: `token sign_in_provider: ${inspection.signInProvider ?? 'missing'} ✗ (the published rules require google.com)`;
+
+			accessCheckSummary = probe.readAllowed
+				? 'Read test: allowed ✓ — the rules accept this account.'
+				: `Read test: ${probe.code} ✗ — ${probe.detail}`;
+			accessCheckDetail = [claims, verified, provider].join('\n');
+		} catch (error) {
+			accessCheckSummary = `Access check failed: ${error instanceof Error ? error.message : 'unknown error'}`;
+		} finally {
+			accessCheckRunning = false;
+		}
+	}
+
+	// A refused lookup triggers the check immediately.
+	$: if ($vaultSession.status === 'error' && accessCheckSummary === null && !accessCheckRunning) {
+		void runAccessCheck();
+	}
 
 	/**
 	 * Publishing the rule set is the one step that must happen in the Firebase
@@ -233,6 +289,22 @@
 					<p class="eyebrow">VAULT ACCESS</p>
 					<h1 id="access-title">We could not open your Vault.</h1>
 					<p>{$vaultSession.error ?? 'Please try again.'}</p>
+
+					<div class="access-check">
+						<p>
+							<strong>Access check:</strong>
+							{accessCheckRunning && !accessCheckSummary
+								? 'running…'
+								: (accessCheckSummary ?? 'not run yet')}
+						</p>
+						{#if accessCheckDetail}
+							<details>
+								<summary>Token claims sent with every request</summary>
+								<pre>{accessCheckDetail}</pre>
+							</details>
+						{/if}
+					</div>
+
 					<div class="actions">
 						<button class="primary" type="button" onclick={retryVaultLookup}>Try again</button>
 						{#if rulesConsoleUrl}
@@ -395,6 +467,38 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 10px;
+	}
+
+	.access-check {
+		margin: 0 0 18px;
+		padding: 12px;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		background: var(--surface-hover);
+		color: var(--text);
+		font-size: 0.82rem;
+		line-height: 1.5;
+	}
+
+	.access-check p {
+		margin: 0;
+	}
+
+	.access-check summary {
+		margin-top: 8px;
+		color: var(--muted);
+		cursor: pointer;
+		font-weight: 700;
+	}
+
+	.access-check pre {
+		margin: 8px 0 0;
+		color: var(--text);
+		font-size: 0.72rem;
+		line-height: 1.5;
+		overflow-x: auto;
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
 	.diagnostics {

@@ -2,6 +2,7 @@ import type { FirebaseError } from 'firebase/app';
 import {
 	collection,
 	doc,
+	getDoc,
 	onSnapshot,
 	query,
 	serverTimestamp,
@@ -13,6 +14,11 @@ import {
 	type Unsubscribe
 } from 'firebase/firestore';
 
+import {
+	ACCESS_PROBE_COLLECTION,
+	ACCESS_PROBE_DOCUMENT,
+	describeAccessProbe
+} from '$lib/firebase/access-probe';
 import { resolveAccountEmail } from '$lib/firebase/account';
 import { getFirebaseClient } from '$lib/firebase/client';
 import type { VaultMember, VaultSetupInput, VaultSummary, VaultTotals } from '$lib/types/vault';
@@ -217,6 +223,35 @@ export function subscribeToVaultMembership(
 		unsubscribeA();
 		unsubscribeB();
 	};
+}
+
+export interface AccessProbe {
+	/** True when an allowed read reached the server. */
+	readAllowed: boolean;
+	code: string | null;
+	detail: string;
+}
+
+/**
+ * Reads a document that never exists. A missing document returns normally when
+ * the rules allow the read, so the result separates "the published rules (or
+ * the Google token claims) deny this account" from "reads work; the vault
+ * simply does not exist yet".
+ */
+export async function probeVaultReadAccess(): Promise<AccessProbe> {
+	const { db } = getFirebaseClient();
+
+	try {
+		await getDoc(doc(db, ACCESS_PROBE_COLLECTION, ACCESS_PROBE_DOCUMENT));
+		return {
+			readAllowed: true,
+			code: null,
+			detail: 'Rules allow this account to read /vaults. Nothing is denying the lookup.'
+		};
+	} catch (error) {
+		const code = (error as Partial<FirebaseError>)?.code ?? 'unknown';
+		return { readAllowed: false, code, detail: describeAccessProbe(code) };
+	}
 }
 
 export function vaultErrorMessage(error: unknown): string {

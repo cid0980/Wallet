@@ -221,6 +221,18 @@ If a session still has no email, the sign-in screen names the account and the mi
 
 The unusable session is signed out on the device as soon as it is detected, so it cannot block later attempts.
 
+### "Vault access was denied" despite publishing the rules
+
+The vault-access error card now runs its own access check and shows the token claims Google sent, so the cause is visible without dev tools:
+
+- **Read test: allowed** yet the lookup still fails → the two membership queries are being refused while plain reads work. Report the screen.
+- **Read test: permission-denied** → either the rules were pasted but not published, or the token fails one of the conditions `signedInWithVerifiedGoogleEmail()` tests: `email` is a string, `email_verified == true`, and `firebase.sign_in_provider == 'google.com'`. The card prints all three.
+- **token email_verified: missing/not-boolean** or **sign_in_provider: missing** → the rules cannot be satisfied by that token shape.
+
+### A cached bundle can hide a fix
+
+The service worker now updates itself (`registerType: 'autoUpdate'`): a new deployment takes over on the next load and checks again every 30 minutes, so an old cached bundle cannot present a fixed bug as still broken. Before that, the sign-in screen kept showing pre-fix error text until the update prompt was tapped. When checking a deployment, also confirm the page is the production domain, not a preview URL.
+
 ### Publish the current Firestore rules before recording money
 
 The Step 1 bootstrap policy in git history only covers vault creation and discovery. Its catch-all (`match /vaults/{vaultId}/{document=**} { allow read, write: if false; }`) denies every client, payment, expense, and history read, so a created vault would open straight into "We could not load your records." Copy the repository's current `firestore.rules` (the 500+ line policy tested by `npm run test:rules`) into Firestore Database → Rules and publish it.
