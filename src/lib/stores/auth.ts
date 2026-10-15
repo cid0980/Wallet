@@ -12,7 +12,11 @@ import {
 import { writable } from 'svelte/store';
 
 import { getFirebaseClient } from '$lib/firebase/client';
-import { firebaseErrorCode, shouldFallBackToRedirect } from '$lib/firebase/sign-in-strategy';
+import {
+	firebaseErrorCode,
+	hasUsableAccountEmail,
+	shouldFallBackToRedirect
+} from '$lib/firebase/sign-in-strategy';
 
 export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'signing-in' | 'error';
 
@@ -203,10 +207,28 @@ export async function startAuthObserver(): Promise<void> {
 			auth,
 			(user) => {
 				clearRedirectWatchdog();
+
+				// Every Vault screen needs the account email: it selects the shared
+				// vault and it is what the security rules compare against. A session
+				// without an email must be an explicit error, never a silent blank
+				// screen somewhere further down the render tree.
+				const missingEmail = Boolean(user) && !hasUsableAccountEmail(user);
+
+				if (missingEmail) {
+					console.info('[vault:auth] signed-in account without an email address', {
+						uid: user?.uid,
+						provider: user?.providerData?.[0]?.providerId
+					});
+				}
+
 				authState.set({
-					status: user ? 'signed-in' : 'signed-out',
-					user,
-					error: user ? null : redirectError
+					status: missingEmail ? 'error' : user ? 'signed-in' : 'signed-out',
+					user: missingEmail ? null : user,
+					error: missingEmail
+						? 'Your Google account did not provide an email address. Sign in with a Google account that has an email, or tap Sign out and choose another account.'
+						: user
+							? null
+							: redirectError
 				});
 				redirectError = null;
 			},

@@ -20,6 +20,7 @@
 	let creatingVault = false;
 	let signingOut = false;
 	let setupError: string | null = null;
+	let startupError: string | null = null;
 
 	onMount(() => {
 		void startAuthObserver();
@@ -36,7 +37,7 @@
 	$: if ($authState.status === 'signed-in' && currentEmail && observedEmail !== currentEmail) {
 		observedEmail = currentEmail;
 		setupError = null;
-		observeVaultSession(currentEmail);
+		startVaultSession(currentEmail);
 	}
 
 	$: if (($authState.status !== 'signed-in' || !currentEmail) && observedEmail !== null) {
@@ -50,12 +51,41 @@
 
 	$: if (currentVaultId && observedVaultId !== currentVaultId) {
 		observedVaultId = currentVaultId;
-		observeVaultData(currentVaultId);
+		startVaultData(currentVaultId);
 	}
 
 	$: if (!currentVaultId && observedVaultId !== null) {
 		observedVaultId = null;
 		clearVaultData();
+	}
+
+	/**
+	 * A synchronous throw while creating a Firestore subscription (blocked
+	 * storage, unusable offline cache, malformed configuration) used to escape
+	 * the reactive statement and tear the render tree down, leaving a blank
+	 * screen. Route it into the visible error state instead.
+	 */
+	function startVaultSession(email: string, force = false): void {
+		try {
+			startupError = null;
+			observeVaultSession(email, force);
+		} catch (error) {
+			reportStartupFailure('opening your Vault', error);
+		}
+	}
+
+	function startVaultData(vaultId: string, force = false): void {
+		try {
+			observeVaultData(vaultId, force);
+		} catch (error) {
+			reportStartupFailure('loading your records', error);
+		}
+	}
+
+	function reportStartupFailure(activity: string, error: unknown): void {
+		const message = error instanceof Error ? error.message : 'Vault could not start on this device.';
+		console.info('[vault:startup] failed while ' + activity, error);
+		startupError = `Vault ran into a problem while ${activity}: ${message}`;
 	}
 
 	async function handleCreateVault(input: VaultSetupInput): Promise<void> {
@@ -89,13 +119,27 @@
 
 	function retryVaultLookup(): void {
 		if (currentEmail) {
-			observeVaultSession(currentEmail, true);
+			startVaultSession(currentEmail, true);
 		}
 	}
 
 	function retryVaultData(): void {
 		if (currentVaultId) {
-			observeVaultData(currentVaultId, true);
+			startVaultData(currentVaultId, true);
+		}
+	}
+
+	/** Rebuilds both subscriptions from scratch after an unexpected state. */
+	function restartVaultStartup(): void {
+		startupError = null;
+		clearVaultSession();
+		clearVaultData();
+		observedEmail = null;
+		observedVaultId = null;
+
+		if (currentEmail) {
+			observedEmail = currentEmail;
+			startVaultSession(currentEmail);
 		}
 	}
 </script>
@@ -110,7 +154,30 @@
 </svelte:head>
 
 {#if $authState.status === 'signed-in' && $authState.user && currentEmail && $vaultSession.status === 'ready' && $vaultSession.vault && $vaultData.status === 'ready'}
-	<VaultWorkspace vault={$vaultSession.vault} user={$authState.user} onSignOut={handleSignOut} />
+	<svelte:boundary
+		onerror={(error) => console.info('[vault:workspace] render failed', error)}
+	>
+		{#snippet failed(error)}
+			<main class="gate">
+				<section aria-labelledby="crash-title" class="error-card">
+					<p class="eyebrow">VAULT SCREEN</p>
+					<h1 id="crash-title">This screen could not be drawn.</h1>
+					<p>
+						{error instanceof Error ? error.message : 'The Vault screen hit an unexpected problem.'}
+					</p>
+					<div class="actions">
+						<button class="primary" type="button" onclick={() => window.location.reload()}>
+							Reload Vault
+						</button>
+						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+							Sign out
+						</button>
+					</div>
+				</section>
+			</main>
+		{/snippet}
+		<VaultWorkspace vault={$vaultSession.vault} user={$authState.user} onSignOut={handleSignOut} />
+	</svelte:boundary>
 {:else}
 	<main class="gate">
 		{#if $authState.status === 'loading'}
@@ -167,10 +234,39 @@
 						</button>
 					</div>
 				</section>
+			{:else}
+				{@render startupCard()}
 			{/if}
+		{:else}
+			{@render startupCard()}
 		{/if}
 	</main>
 {/if}
+
+{#snippet startupCard()}
+	<!-- Nothing may render an empty page. Any unexpected combination of auth,
+	     session, and data states lands here with the live state shown, so a
+	     blank screen can never hide a problem again. -->
+	<section aria-labelledby="stuck-title" class="error-card">
+		<p class="eyebrow">VAULT STARTUP</p>
+		<h1 id="stuck-title">Your Vault did not finish starting.</h1>
+		<p>
+			{startupError ??
+				'Vault could not reach a usable state on this device. Try again, and if it repeats, sign out and back in.'}
+		</p>
+		<dl class="diagnostics">
+			<div><dt>Session</dt><dd>{$vaultSession.status}</dd></div>
+			<div><dt>Records</dt><dd>{$vaultData.status}</dd></div>
+			<div><dt>Account</dt><dd>{currentEmail ?? 'none'}</dd></div>
+		</dl>
+		<div class="actions">
+			<button class="primary" type="button" onclick={restartVaultStartup}>Try again</button>
+			<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+				Sign out
+			</button>
+		</div>
+	</section>
+{/snippet}
 
 <PwaUpdatePrompt />
 
@@ -267,6 +363,36 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 10px;
+	}
+
+	.diagnostics {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+		gap: 8px;
+		margin: 0 0 18px;
+	}
+
+	.diagnostics div {
+		padding: 9px 11px;
+		border: 1px solid var(--border);
+		border-radius: 11px;
+		background: var(--surface-hover);
+	}
+
+	.diagnostics dt {
+		color: var(--muted);
+		font-size: 0.68rem;
+		font-weight: 720;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	.diagnostics dd {
+		margin: 3px 0 0;
+		color: var(--text);
+		font-size: 0.82rem;
+		font-weight: 700;
+		overflow-wrap: anywhere;
 	}
 
 	.primary,

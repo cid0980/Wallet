@@ -57,3 +57,16 @@ test('falls back to the redirect flow only for pop-up environment failures', asy
 	assert.equal(shouldFallBackToRedirect({ code: 'auth/popup-closed-by-user' }), false);
 	assert.equal(shouldFallBackToRedirect(new Error('plain')), false);
 });
+
+test('a session without an email is rejected before it can blank the app', async () => {
+	const { hasUsableAccountEmail } = await import('../src/lib/firebase/sign-in-strategy.ts');
+
+	assert.equal(hasUsableAccountEmail({ email: 'cid@example.com' }), true);
+	assert.equal(hasUsableAccountEmail({ email: 'cid@example.com' }), true);
+	assert.equal(hasUsableAccountEmail({ email: null }), false);
+	assert.equal(hasUsableAccountEmail({ email: '' }), false);
+	assert.equal(hasUsableAccountEmail({ email: '   ' }), false);
+	assert.equal(hasUsableAccountEmail({}), false);
+	assert.equal(hasUsableAccountEmail(null), false);
+	assert.equal(hasUsableAccountEmail(undefined), false);
+});

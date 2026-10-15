@@ -5,6 +5,9 @@ node_modules/
 build/
 coverage/
 
+# Generated render-harness bundle
+tests/render-harness/out/
+
 # Local Firebase/Vercel state and logs
 .firebase/
 .vercel/

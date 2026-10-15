@@ -201,4 +201,10 @@ Checklist when Google sign-in fails:
 
 That symptom means the redirect completed but this site was not allowed to read the sign-in result, usually because the browser blocks cross-site storage (Safari, Firefox, or Chrome with third-party cookies blocked). Vault now signs in with a Google pop-up first, which does not depend on that cross-site read, and falls back to the redirect flow only in environments that cannot show a pop-up. If the redirect fallback returns with no session, the sign-in screen now says so explicitly and names the exact origin that must be authorized instead of looping silently.
 
-Run `npm run test:unit` for the auth-domain and sign-in-strategy regression tests and `npm run verify` before pushing.
+### "Blank page after sign-in"
+
+The page previously had no fallback branch, so an unexpected combination of auth, session, and data states rendered an empty screen with no explanation. Rendering is now total: every combination shows either the workspace or a card that names the current state, and the workspace sits inside a Svelte error boundary so a render failure shows a reload button instead of a blank page. A session without an email address, which used to blank the screen, is rejected at the auth boundary.
+
+`npm run test:render` renders the real `+page.svelte` against every session/vault/data combination and fails if any of them is empty or missing its expected content. It runs inside `npm run verify`.
+
+Run `npm run test:unit` for the auth-domain, sign-in-strategy, and account-email regression tests, `npm run test:render` for the render harness, and `npm run verify` before pushing.
