@@ -11,7 +11,12 @@ import {
 } from 'firebase/auth';
 import { writable } from 'svelte/store';
 
-import { describeAccount, resolveAccountEmail } from '$lib/firebase/account';
+import {
+	describeAccount,
+	formatInspection,
+	inspectAccount,
+	resolveAccountEmail
+} from '$lib/firebase/account';
 import { getFirebaseClient } from '$lib/firebase/client';
 import { firebaseErrorCode, shouldFallBackToRedirect } from '$lib/firebase/sign-in-strategy';
 
@@ -21,19 +26,31 @@ export interface AuthState {
 	status: AuthStatus;
 	user: User | null;
 	/**
-	 * The account email Vault signs with. Resolved from the user record or the
-	 * ID token claims, and null when the provider shared none.
+	 * The account email Vault signs with. Resolved from the user record, the
+	 * linked provider entry, or the ID token claims, and null when the provider
+	 * shared none anywhere.
 	 */
 	email: string | null;
 	error: string | null;
+	/** What each email source returned, shown when a session cannot be used. */
+	diagnostic: string | null;
 }
 
 export const authState = writable<AuthState>({
 	status: 'loading',
 	user: null,
 	email: null,
-	error: null
+	error: null,
+	diagnostic: null
 });
+
+/**
+ * A rejected session leaves a notice behind for the sign-in screen. The
+ * sign-out that follows fires the auth listener, so the notice has to outlive
+ * that one state change without being wiped by it.
+ */
+let pendingNotice: string | null = null;
+let pendingDiagnostic: string | null = null;
 
 /**
  * If the browser never actually leaves the page for Google (blocked redirect,
@@ -51,7 +68,7 @@ const REDIRECT_MARKER_KEY = 'vault.auth.pending-redirect';
 const REDIRECT_MARKER_MAX_AGE_MS = 10 * 60_000;
 
 const NO_EMAIL_MESSAGE =
-	'This Google account did not share an email address with Vault, so it has nothing to look a shared vault up with. Some work, school, or admin-restricted Google accounts do this. Sign in with a personal Google account, for example a Gmail address.';
+	'Google did not share an email address for this account, and Vault needs it to find your shared vault. Try Continue with Google again so the email scope is requested. If it repeats, check Firebase Console → Authentication → Settings → User actions → Email enumeration protection, and make sure Google sign-in is the provider you use.';
 
 let authUnsubscribe: Unsubscribe | undefined;
 let authStarted = false;
@@ -70,7 +87,13 @@ async function applyUser(user: User | null, redirectError: string | null): Promi
 
 	if (!user) {
 		if (sequence === authSequence) {
-			authState.set({ status: 'signed-out', user: null, email: null, error: redirectError });
+			authState.set({
+				status: 'signed-out',
+				user: null,
+				email: null,
+				error: redirectError ?? pendingNotice,
+				diagnostic: redirectError ? null : pendingDiagnostic
+			});
 		}
 		return;
 	}
@@ -83,14 +106,36 @@ async function applyUser(user: User | null, redirectError: string | null): Promi
 	}
 
 	if (!email) {
+		const inspection = await inspectAccount(user);
+		const diagnostic = formatInspection(inspection);
 		console.info('[vault:auth] signed-in account has no usable email address', {
-			account: describeAccount(user)
+			account: describeAccount(user),
+			inspection
 		});
-		authState.set({ status: 'error', user: null, email: null, error: NO_EMAIL_MESSAGE });
+
+		pendingNotice = NO_EMAIL_MESSAGE;
+		pendingDiagnostic = diagnostic;
+		authState.set({
+			status: 'error',
+			user: null,
+			email: null,
+			error: NO_EMAIL_MESSAGE,
+			diagnostic
+		});
+
+		// Clear the unusable session from this device so the next attempt starts
+		// clean instead of restoring the same account on every load.
+		try {
+			await signOutFromAuth();
+		} catch {
+			// Signing out is best effort; the notice above is already on screen.
+		}
 		return;
 	}
 
-	authState.set({ status: 'signed-in', user, email, error: null });
+	pendingNotice = null;
+	pendingDiagnostic = null;
+	authState.set({ status: 'signed-in', user, email, error: null, diagnostic: null });
 }
 
 function authErrorMessage(error: unknown): string {
@@ -233,7 +278,7 @@ export async function startAuthObserver(): Promise<void> {
 	}
 
 	authStarted = true;
-	authState.set({ status: 'loading', user: null, email: null, error: null });
+	authState.set({ status: 'loading', user: null, email: null, error: null, diagnostic: null });
 
 	try {
 		const { auth, authPersistenceReady } = getFirebaseClient();
@@ -255,7 +300,8 @@ export async function startAuthObserver(): Promise<void> {
 					status: 'error',
 					user: null,
 					email: null,
-					error: authErrorMessage(error)
+					error: authErrorMessage(error),
+					diagnostic: null
 				});
 			}
 		);
@@ -290,7 +336,8 @@ export async function startAuthObserver(): Promise<void> {
 			status: 'error',
 			user: null,
 			email: null,
-			error: authErrorMessage(error)
+			error: authErrorMessage(error),
+			diagnostic: null
 		});
 	}
 }
@@ -325,7 +372,9 @@ async function signInWithRedirectFallback(): Promise<void> {
  */
 export async function signInWithGoogle(): Promise<void> {
 	const { auth, googleProvider } = getFirebaseClient();
-	authState.update((state) => ({ ...state, status: 'signing-in', error: null }));
+	pendingNotice = null;
+	pendingDiagnostic = null;
+	authState.update((state) => ({ ...state, status: 'signing-in', error: null, diagnostic: null }));
 
 	try {
 		const credential = await signInWithPopup(auth, googleProvider);
@@ -352,10 +401,14 @@ export async function signInWithGoogle(): Promise<void> {
 	}
 }
 
-export async function signOutOfVault(): Promise<void> {
+async function signOutFromAuth(): Promise<void> {
 	const { auth } = getFirebaseClient();
-	clearPendingRedirect();
 	await signOut(auth);
+}
+
+export async function signOutOfVault(): Promise<void> {
+	clearPendingRedirect();
+	await signOutFromAuth();
 }
 
 export function stopAuthObserver(): void {

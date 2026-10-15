@@ -16,11 +16,26 @@ export interface TokenLike {
 	claims?: Record<string, unknown>;
 }
 
+export interface ProviderLike {
+	providerId?: string;
+	email?: string | null;
+}
+
 export interface AccountLike {
 	email?: string | null;
 	uid?: string;
-	providerData?: { providerId?: string }[] | null;
+	providerData?: ProviderLike[] | null;
 	getIdTokenResult?: () => Promise<TokenLike>;
+}
+
+export interface AccountInspection {
+	uid: string | null;
+	providers: string[];
+	recordEmail: string | null;
+	providerEmail: string | null;
+	claimsEmail: string | null;
+	claimKeys: string[];
+	tokenError: string | null;
 }
 
 /** The email claim carried by the ID token, lower-cased by Google. */
@@ -29,9 +44,36 @@ export function emailFromClaims(claims: Record<string, unknown> | undefined): st
 	return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+/** The email carried by the linked provider, which survives a stripped record. */
+export function emailFromProviderData(user: AccountLike | null | undefined): string | null {
+	for (const provider of user?.providerData ?? []) {
+		const value = provider?.email;
+		if (typeof value === 'string' && value.trim()) {
+			return value.trim();
+		}
+	}
+
+	return null;
+}
+
+async function tokenClaims(
+	user: AccountLike | null | undefined
+): Promise<{ claims: Record<string, unknown> | undefined; error: string | null }> {
+	if (!user?.getIdTokenResult) {
+		return { claims: undefined, error: null };
+	}
+
+	try {
+		const token = await user.getIdTokenResult();
+		return { claims: token.claims as Record<string, unknown> | undefined, error: null };
+	} catch (error) {
+		return { claims: undefined, error: error instanceof Error ? error.message : 'token lookup failed' };
+	}
+}
+
 /**
- * Resolves the account email, preferring the user record and falling back to
- * the ID token claims when the record carries none.
+ * Resolves the account email from every source Firebase can offer:
+ * the user record, the linked provider entry, and finally the ID token claims.
  */
 export async function resolveAccountEmail(
 	user: AccountLike | null | undefined
@@ -40,16 +82,48 @@ export async function resolveAccountEmail(
 		return user.email.trim();
 	}
 
-	if (!user?.getIdTokenResult) {
-		return null;
+	const providerEmail = emailFromProviderData(user);
+	if (providerEmail) {
+		return providerEmail;
 	}
 
-	try {
-		const token = await user.getIdTokenResult();
-		return emailFromClaims(token.claims);
-	} catch {
-		return null;
-	}
+	const { claims } = await tokenClaims(user);
+	return emailFromClaims(claims);
+}
+
+/**
+ * Records what each email source returned, so a single screenshot of the
+ * failure screen explains why a session could not be used.
+ */
+export async function inspectAccount(
+	user: AccountLike | null | undefined
+): Promise<AccountInspection> {
+	const { claims, error } = await tokenClaims(user);
+
+	return {
+		uid: user?.uid ?? null,
+		providers: (user?.providerData ?? [])
+			.map((provider) => provider?.providerId)
+			.filter((providerId): providerId is string => Boolean(providerId)),
+		recordEmail: typeof user?.email === 'string' && user.email.trim() ? user.email.trim() : null,
+		providerEmail: emailFromProviderData(user),
+		claimsEmail: emailFromClaims(claims),
+		claimKeys: Object.keys(claims ?? {}).sort(),
+		tokenError: error
+	};
+}
+
+/** Renders an inspection for on-screen display. */
+export function formatInspection(inspection: AccountInspection): string {
+	return [
+		`uid: ${inspection.uid ?? 'none'}`,
+		`providers: ${inspection.providers.join(', ') || 'none'}`,
+		`record email: ${inspection.recordEmail ?? 'missing'}`,
+		`provider email: ${inspection.providerEmail ?? 'missing'}`,
+		`token email claim: ${inspection.claimsEmail ?? 'missing'}`,
+		`token claim keys: ${inspection.claimKeys.join(', ') || 'none'}`,
+		`token lookup: ${inspection.tokenError ?? 'ok'}`
+	].join('\n');
 }
 
 /** Short human-readable identification of an account, for diagnostics. */

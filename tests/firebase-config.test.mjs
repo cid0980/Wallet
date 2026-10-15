@@ -129,3 +129,56 @@ test('resolves the account email from the token when the record has none', async
 	assert.match(describeAccount(recordWithoutEmail), /email missing/);
 	assert.equal(describeAccount(null), 'no account');
 });
+
+test('finds the email from provider data and reports what each source returned', async () => {
+	const { emailFromProviderData, inspectAccount, formatInspection, resolveAccountEmail } =
+		await import('../src/lib/firebase/account.ts');
+
+	// The record is stripped, but the linked Google entry still carries it.
+	const providerOnly = {
+		email: null,
+		uid: 'uid-9',
+		providerData: [{ providerId: 'google.com', email: 'asencid07@gmail.com' }],
+		getIdTokenResult: async () => ({ claims: { name: 'Cid' } })
+	};
+	assert.equal(emailFromProviderData(providerOnly), 'asencid07@gmail.com');
+	assert.equal(await resolveAccountEmail(providerOnly), 'asencid07@gmail.com');
+
+	// Nothing anywhere: the session must be rejected with a full explanation.
+	const nothing = {
+		email: '',
+		uid: 'uid-10',
+		providerData: [{ providerId: 'google.com', email: null }],
+		getIdTokenResult: async () => ({ claims: { name: 'No Email', picture: 'x' } })
+	};
+	assert.equal(emailFromProviderData(nothing), null);
+	assert.equal(await resolveAccountEmail(nothing), null);
+
+	const inspection = await inspectAccount(nothing);
+	assert.equal(inspection.uid, 'uid-10');
+	assert.deepEqual(inspection.providers, ['google.com']);
+	assert.equal(inspection.recordEmail, null);
+	assert.equal(inspection.providerEmail, null);
+	assert.equal(inspection.claimsEmail, null);
+	assert.deepEqual(inspection.claimKeys, ['name', 'picture']);
+	assert.equal(inspection.tokenError, null);
+
+	const report = formatInspection(inspection);
+	assert.match(report, /uid: uid-10/);
+	assert.match(report, /record email: missing/);
+	assert.match(report, /token email claim: missing/);
+	assert.match(report, /token claim keys: name, picture/);
+
+	// A failing token lookup is reported rather than thrown.
+	const broken = {
+		email: null,
+		uid: 'uid-11',
+		providerData: [],
+		getIdTokenResult: async () => {
+			throw new Error('auth/network-request-failed');
+		}
+	};
+	const brokenInspection = await inspectAccount(broken);
+	assert.match(brokenInspection.tokenError ?? '', /network-request-failed/);
+	assert.match(formatInspection(brokenInspection), /token lookup: auth\/network-request-failed/);
+});

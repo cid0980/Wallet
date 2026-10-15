@@ -189,6 +189,7 @@
 			<GoogleLogin
 				busy={$authState.status === 'signing-in'}
 				error={$authState.error}
+				diagnostic={$authState.diagnostic}
 				onSignIn={signInWithGoogle}
 			/>
 		{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}

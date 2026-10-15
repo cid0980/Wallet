@@ -1,6 +1,7 @@
 <script lang="ts">
 	export let busy = false;
 	export let error: string | null = null;
+	export let diagnostic: string | null = null;
 	export let onSignIn: () => Promise<void> | void;
 </script>
 
@@ -36,6 +37,12 @@
 
 	{#if error}
 		<p class="error" role="alert">{error}</p>
+		{#if diagnostic}
+			<details class="diagnostic">
+				<summary>What Vault received from Google</summary>
+				<pre>{diagnostic}</pre>
+			</details>
+		{/if}
 	{/if}
 
 	<p class="trust-note">
@@ -140,6 +147,32 @@
 		color: #aa2822;
 		font-size: 0.9rem;
 		line-height: 1.45;
+	}
+
+	.diagnostic {
+		margin-top: 12px;
+		color: var(--muted);
+		font-size: 0.78rem;
+		line-height: 1.5;
+	}
+
+	.diagnostic summary {
+		cursor: pointer;
+		font-weight: 700;
+	}
+
+	.diagnostic pre {
+		margin: 8px 0 0;
+		padding: 10px 11px;
+		border: 1px solid var(--border);
+		border-radius: 11px;
+		background: var(--surface-hover);
+		color: var(--text);
+		font-size: 0.72rem;
+		line-height: 1.5;
+		overflow-x: auto;
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
 	.trust-note {

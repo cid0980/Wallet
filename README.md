@@ -209,7 +209,17 @@ The page previously had no fallback branch, so an unexpected combination of auth
 
 ### "The app stops after sign-in and the Firebase Users table shows no email"
 
-Firebase Authentication created the user, but the account shared no email claim. Vault signs with the account email twice over: it finds the shared vault by it, and the Firestore rules compare it against `request.auth.token.email`. Vault resolves the email from the user record and, when that is empty, from the ID token claims, then refuses the session with a clear message if neither has one. Some work, school, or admin-restricted Google accounts never share an email. Sign in with a personal Google account.
+The Google sign-in returned no email claim, so Firebase created a user whose identifier is empty and Vault had nothing to look a shared vault up with. Vault signs with the account email twice over: it finds the shared vault by it, and the Firestore rules compare it against `request.auth.token.email`.
+
+Vault now requests the `email` scope explicitly on the Google provider. The SDK's `GoogleAuthProvider` requests only `profile` by default, and without an explicit `email` scope Google can return an ID token with no email claim. Vault also resolves the email from three sources in order (user record, linked provider entry, ID token claims) and shows what each source returned under *What Vault received from Google* when a session cannot be used.
+
+If a session still has no email, the sign-in screen names the account and the missing claim. Check:
+
+- Firebase Console → Authentication → Settings → **User actions** → *Email enumeration protection*. Users there report it can strip the email from the returned account; disabling it restores it.
+- Firebase Console → Authentication → **Sign-in method** → Google enabled.
+- The Google account itself. Some work, school, or admin-restricted accounts do not share an email; a personal Google account always does.
+
+The unusable session is signed out on the device as soon as it is detected, so it cannot block later attempts.
 
 ### Publish the current Firestore rules before recording money
 
