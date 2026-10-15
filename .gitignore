@@ -7,6 +7,7 @@ coverage/
 
 # Generated render-harness bundle
 tests/render-harness/out/
+tests/interaction-harness/out/
 
 # Local Firebase/Vercel state and logs
 .firebase/

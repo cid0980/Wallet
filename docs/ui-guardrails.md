@@ -29,4 +29,4 @@ Walk through all ten Nielsen heuristics, particularly: visible sync/offline stat
 
 Every interactive control needs keyboard focus, hover, pressed and disabled treatment. Every async path needs an understandable pending state and a success or failure outcome. Use shape-matched skeletons where a list is loading; keep transient motion short and remove it under `prefers-reduced-motion: reduce`. Never show an indefinite decorative animation as the only loading explanation.
 
-Run `npm run check`, `npm run test:unit`, `npm run test:render`, `npm run test:rules`, and `NODE_OPTIONS=--max-old-space-size=700 npm run build` before publishing. The render harness asserts some landmark and state markup as well as visible content.
+Run `npm run check`, `npm run test:unit`, `npm run test:render`, `npm run test:interaction`, `npm run test:rules`, and `NODE_OPTIONS=--max-old-space-size=700 npm run build` before publishing. The render harness asserts some landmark and state markup as well as visible content.

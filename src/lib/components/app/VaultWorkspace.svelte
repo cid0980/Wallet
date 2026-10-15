@@ -43,6 +43,7 @@
 		yesterdayDateKey
 	} from '$lib/utils/dates';
 	import { formatPaise, formatPaiseInput, netPaise, parseMoneyToPaise } from '$lib/utils/money';
+	import { projectIdForClient, projectsForClient } from '$lib/utils/project-picker';
 
 	type MainTab = 'home' | 'clients' | 'projects' | 'payments' | 'expenses' | 'more';
 	type Composer = 'none' | 'client' | 'project' | 'payment' | 'expense';
@@ -135,7 +136,8 @@
 	})();
 
 	$: activeProjects = $vaultData.projects.filter((project) => project.status === 'active');
-	$: selectedPaymentProject = $vaultData.projects.find((project) => project.id === paymentProjectId) ?? null;
+	$: paymentClientProjects = projectsForClient($vaultData.projects, paymentClientId);
+	$: selectedPaymentProject = paymentClientProjects.find((project) => project.id === paymentProjectId) ?? null;
 
 	$: paidByProject = (() => {
 		const paid: Record<string, number> = {};
@@ -275,6 +277,19 @@
 		composer = 'payment';
 	}
 
+	function choosePaymentClient(clientId: string): void {
+		paymentClientId = clientId;
+		// A project never belongs to two clients. Keep "No project" when
+		// switching clients rather than silently linking to another client's work.
+		paymentProjectId = projectIdForClient($vaultData.projects, clientId, paymentProjectId);
+	}
+
+	function choosePaymentProject(projectId: string): void {
+		if (!projectId || paymentClientProjects.some((project) => project.id === projectId)) {
+			paymentProjectId = projectId;
+		}
+	}
+
 	function viewProjectPayments(project: ProjectRecord): void {
 		switchTab('payments');
 		paymentProjectFilter = { id: project.id, name: project.name };
@@ -286,7 +301,7 @@
 		expenseClientId = expense?.clientId ?? '';
 		expenseAmount = expense ? formatPaiseInput(expense.amountPaise) : '';
 		expensePartner = expense?.partner ?? ownPartner;
-		expenseTags = expense?.tags?.length ? [...expense.tags] : vault.tags.slice(0, 1);
+		expenseTags = expense?.tags?.length ? [...expense.tags] : [];
 		expenseDate = expense?.occurredOn ?? todayDateKey();
 		expenseDateMode = dateModeFor(expenseDate);
 		expenseNote = expense?.note ?? '';
@@ -351,6 +366,10 @@
 		await runAction(async () => {
 			if (!selectedPaymentClient) {
 				throw new Error('Choose an active client.');
+			}
+
+			if (paymentProjectId && !selectedPaymentProject) {
+				throw new Error('Choose a project for this client, or choose No project.');
 			}
 
 			const input = {
@@ -1154,13 +1173,17 @@
 
 						<div class="field">
 							<span class="field__label">Client</span>
-							<ChipGroup label="Client" options={paymentClientOptions} value={paymentClientId} disabled={actionBusy} onChange={(value) => { paymentClientId = value; if (selectedPaymentProject && selectedPaymentProject.clientId !== value) paymentProjectId = ''; }} />
+							<ChipGroup label="Client" options={paymentClientOptions} value={paymentClientId} disabled={actionBusy} onChange={choosePaymentClient} />
 						</div>
 
 						{#if $vaultData.projects.length}
 							<div class="field">
 								<span class="field__label">Project <em class="field__optional">optional</em></span>
-								<ChipGroup label="Project for this payment" options={[{ value: '', label: 'No project' }, ...$vaultData.projects.map((project) => ({ value: project.id, label: project.name }))]} value={paymentProjectId} disabled={actionBusy} onChange={(value) => { paymentProjectId = value; const project = $vaultData.projects.find((entry) => entry.id === value); if (project) paymentClientId = project.clientId; }} />
+								{#if paymentClientProjects.length}
+									<ChipGroup label="Project for this payment" options={[{ value: '', label: 'No project' }, ...paymentClientProjects.map((project) => ({ value: project.id, label: project.name }))]} value={selectedPaymentProject?.id ?? ''} disabled={actionBusy} onChange={choosePaymentProject} />
+								{:else}
+									<p class="hint">{selectedPaymentClient?.name ?? 'This client'} has no projects yet. You can still record a payment without a project.</p>
+								{/if}
 								{#if selectedPaymentProject}
 									<p class="hint">
 										Adds to {selectedPaymentProject.name} · {formatPaise(paidByProject[selectedPaymentProject.id] ?? 0)} received so far of {formatPaise(selectedPaymentProject.estimatedPaise)} estimated. Partial payments are welcome.
@@ -1244,8 +1267,8 @@
 
 					<div class="field">
 						<span class="field__label">What it was for</span>
-						<ChipGroup label="Spending tags" options={tagOptions.map((tag) => ({ value: tag, label: tag }))} multiple values={expenseTags} disabled={actionBusy} onChange={toggleExpenseTag} />
-						<p class="hint">Pick one or more tags. You can add more in More → Settings.</p>
+						<ChipGroup label="Spending tags" options={tagOptions.map((tag) => ({ value: tag, label: tag }))} multiple values={expenseTags} maxSelected={MAX_EXPENSE_TAGS} disabled={actionBusy} onChange={toggleExpenseTag} />
+						<p class="hint" role="status">{expenseTags.length} of {MAX_EXPENSE_TAGS} tags selected. {expenseTags.length === MAX_EXPENSE_TAGS ? 'Remove one to choose another.' : 'Choose at least one. Add more tags in More → Settings.'}</p>
 					</div>
 
 					<div class="field">
@@ -1275,7 +1298,7 @@
 						<textarea class="textarea" bind:value={expenseNote} maxlength="1000" rows="3" placeholder="Why this cost came up" disabled={actionBusy}></textarea>
 					</label>
 
-					<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
+					<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy || expenseTags.length === 0}>
 						{actionBusy ? 'Saving…' : editingExpense ? 'Save expense' : 'Add expense'}
 					</button>
 				</form>

@@ -18,12 +18,14 @@
 		multiple?: boolean;
 		value?: string;
 		values?: string[];
+		/** Disable unselected options when the maximum is reached. */
+		maxSelected?: number;
 		disabled?: boolean;
 		/** Single: the newly chosen value. Multiple: the value that toggled. */
 		onChange: (value: string) => void;
 	}
 
-	let { label, options, multiple = false, value = '', values = [], disabled = false, onChange }: Props = $props();
+	let { label, options, multiple = false, value = '', values = [], maxSelected = Infinity, disabled = false, onChange }: Props = $props();
 
 	let buttons: (HTMLButtonElement | undefined)[] = $state([]);
 
@@ -76,21 +78,34 @@
 	onkeydown={handleKeydown}
 >
 	{#each options as option, index (option.value)}
-		<button
-			class="chip"
-			class:chip--on={isOn(option)}
-			type="button"
-			role={multiple ? undefined : 'radio'}
-			aria-checked={multiple ? undefined : isOn(option)}
-			aria-pressed={multiple ? isOn(option) : undefined}
-			tabindex={multiple ? undefined : index === tabbableIndex ? 0 : -1}
-			disabled={disabled}
-			bind:this={buttons[index]}
-			onclick={() => onChange(option.value)}
-		>
-			{#if option.initial}<span class="chip__dot" aria-hidden="true">{option.initial}</span>{/if}
-			{#if option.icon}<Icon name={option.icon} size={16} />{/if}
-			{option.label}
-		</button>
+		{#if multiple}
+			<label class="chip chip--choice" class:chip--on={isOn(option)} class:chip--unavailable={disabled || (values.length >= maxSelected && !isOn(option))}>
+				<input
+					type="checkbox"
+					checked={isOn(option)}
+					disabled={disabled || (values.length >= maxSelected && !isOn(option))}
+					onchange={() => onChange(option.value)}
+				/>
+				{#if option.initial}<span class="chip__dot" aria-hidden="true">{option.initial}</span>{/if}
+				{#if option.icon}<Icon name={option.icon} size={16} />{/if}
+				{option.label}
+			</label>
+		{:else}
+			<button
+				class="chip"
+				class:chip--on={isOn(option)}
+				type="button"
+				role="radio"
+				aria-checked={isOn(option)}
+				tabindex={index === tabbableIndex ? 0 : -1}
+				disabled={disabled}
+				bind:this={buttons[index]}
+				onclick={() => onChange(option.value)}
+			>
+				{#if option.initial}<span class="chip__dot" aria-hidden="true">{option.initial}</span>{/if}
+				{#if option.icon}<Icon name={option.icon} size={16} />{/if}
+				{option.label}
+			</button>
+		{/if}
 	{/each}
 </div>

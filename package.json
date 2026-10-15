@@ -12,12 +12,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test:unit": "node --test tests/firebase-config.test.mjs",
+    "test:unit": "node --test tests/firebase-config.test.mjs tests/project-picker.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project vault-rules-test \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs\"",
-    "verify": "npm run check && npm run test:unit && npm run test:render && npm run test:rules && npm run build",
+    "verify": "npm run check && npm run test:unit && npm run test:render && npm run test:interaction && npm run test:rules && npm run build",
     "emulators": "firebase emulators:start --only auth,firestore --project vault-local",
     "firestore:rules:deploy": "firebase deploy --only firestore:rules",
-    "test:render": "vite build --config tests/render-harness/vite.config.ts && node tests/render-harness/out/entry.js"
+    "test:render": "vite build --config tests/render-harness/vite.config.ts && node tests/render-harness/out/entry.js",
+    "test:interaction": "vite build --config tests/interaction-harness/vite.config.ts && node tests/interaction-harness/run.mjs"
   },
   "dependencies": {
     "firebase": "13.0.0"
@@ -29,6 +30,7 @@
     "@sveltejs/vite-plugin-svelte": "6.2.4",
     "@vite-pwa/sveltekit": "1.1.0",
     "firebase-tools": "15.33.0",
+    "jsdom": "26.1.0",
     "svelte": "5.57.2",
     "svelte-check": "4.7.6",
     "typescript": "5.9.3",

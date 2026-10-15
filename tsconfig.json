@@ -13,6 +13,7 @@
   },
   "exclude": [
     "tests/render-harness/out",
+    "tests/interaction-harness/out",
     "build",
     "node_modules",
     ".svelte-kit/output"
