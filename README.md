@@ -229,6 +229,10 @@ The vault-access error card now runs its own access check and shows the token cl
 - **Read test: permission-denied** → either the rules were pasted but not published, or the token fails one of the conditions `signedInWithVerifiedGoogleEmail()` tests: `email` is a string, `email_verified == true`, and `firebase.sign_in_provider == 'google.com'`. The card prints all three.
 - **token email_verified: missing/not-boolean** or **sign_in_provider: missing** → the rules cannot be satisfied by that token shape.
 
+### "Token email claim: missing" while the provider email is present
+
+This is the state left behind by an account created while the app did not request the Google email scope: the record has no email, so every ID token minted for it carries no `email` claim, and the published rules (which require `request.auth.token.email`) deny every read. Vault force-refreshes the token once, and if the claim is still absent it says so instead of reporting a rules problem, with a link straight to the Users table. Fix: delete that account in Firebase Console → Authentication → Users and sign in again. If it repeats, turn off Authentication → Settings → User actions → Email enumeration protection.
+
 ### A cached bundle can hide a fix
 
 The service worker now updates itself (`registerType: 'autoUpdate'`): a new deployment takes over on the next load and checks again every 30 minutes, so an old cached bundle cannot present a fixed bug as still broken. Before that, the sign-in screen kept showing pre-fix error text until the update prompt was tapped. When checking a deployment, also confirm the page is the production domain, not a preview URL.

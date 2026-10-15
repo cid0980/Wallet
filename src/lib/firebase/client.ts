@@ -73,6 +73,14 @@ export function firestoreRulesConsoleUrl(): string | null {
 		: null;
 }
 
+/** Deep link to this project's Authentication users table. */
+export function authUsersConsoleUrl(): string | null {
+	const projectId = firebaseProjectId();
+	return projectId
+		? `https://console.firebase.google.com/project/${projectId}/authentication/users`
+		: null;
+}
+
 /** The published rule set this app is built for. */
 export const FIRESTORE_RULES_FILE_URL =
 	'https://raw.githubusercontent.com/cid0980/Wallet/main/firestore.rules';

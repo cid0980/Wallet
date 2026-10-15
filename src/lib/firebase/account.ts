@@ -25,7 +25,7 @@ export interface AccountLike {
 	email?: string | null;
 	uid?: string;
 	providerData?: ProviderLike[] | null;
-	getIdTokenResult?: () => Promise<TokenLike>;
+	getIdTokenResult?: (forceRefresh?: boolean) => Promise<TokenLike>;
 }
 
 export interface AccountInspection {
@@ -60,38 +60,67 @@ export function emailFromProviderData(user: AccountLike | null | undefined): str
 }
 
 async function tokenClaims(
-	user: AccountLike | null | undefined
+	user: AccountLike | null | undefined,
+	forceRefresh = false
 ): Promise<{ claims: Record<string, unknown> | undefined; error: string | null }> {
 	if (!user?.getIdTokenResult) {
 		return { claims: undefined, error: null };
 	}
 
 	try {
-		const token = await user.getIdTokenResult();
+		const token = await user.getIdTokenResult(forceRefresh);
 		return { claims: token.claims as Record<string, unknown> | undefined, error: null };
 	} catch (error) {
 		return { claims: undefined, error: error instanceof Error ? error.message : 'token lookup failed' };
 	}
 }
 
+export interface ResolvedAccount {
+	/** The best email available for identifying the account and the vault. */
+	email: string | null;
+	/**
+	 * The email claim inside the ID token. This is the value the Firestore
+	 * rules read, so an account can be identifiable and still unusable: a
+	 * record created before the email scope existed keeps minting tokens with
+	 * no `email` claim, and every read is denied.
+	 */
+	tokenEmail: string | null;
+}
+
 /**
- * Resolves the account email from every source Firebase can offer:
- * the user record, the linked provider entry, and finally the ID token claims.
+ * Resolves the account email from every source Firebase can offer (user record,
+ * linked provider entry, ID token claims) and reports the token's own claim.
+ *
+ * When the token carries no email, one forced refresh is attempted first: a
+ * usable record sometimes mints its email only on the next token.
  */
+export async function resolveAccount(
+	user: AccountLike | null | undefined
+): Promise<ResolvedAccount> {
+	const recordEmail =
+		typeof user?.email === 'string' && user.email.trim() ? user.email.trim() : null;
+	const providerEmail = emailFromProviderData(user);
+
+	let { claims } = await tokenClaims(user);
+	let tokenEmail = emailFromClaims(claims);
+
+	if (!tokenEmail) {
+		const refreshed = await tokenClaims(user, true);
+		claims = refreshed.claims ?? claims;
+		tokenEmail = emailFromClaims(claims);
+	}
+
+	return {
+		email: recordEmail ?? providerEmail ?? tokenEmail,
+		tokenEmail
+	};
+}
+
+/** Convenience wrapper for callers that only need the identifying email. */
 export async function resolveAccountEmail(
 	user: AccountLike | null | undefined
 ): Promise<string | null> {
-	if (typeof user?.email === 'string' && user.email.trim()) {
-		return user.email.trim();
-	}
-
-	const providerEmail = emailFromProviderData(user);
-	if (providerEmail) {
-		return providerEmail;
-	}
-
-	const { claims } = await tokenClaims(user);
-	return emailFromClaims(claims);
+	return (await resolveAccount(user)).email;
 }
 
 /**

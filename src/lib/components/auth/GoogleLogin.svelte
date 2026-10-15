@@ -2,6 +2,7 @@
 	export let busy = false;
 	export let error: string | null = null;
 	export let diagnostic: string | null = null;
+	export let usersConsoleUrl: string | null = null;
 	export let onSignIn: () => Promise<void> | void;
 </script>
 
@@ -42,6 +43,11 @@
 				<summary>What Vault received from Google</summary>
 				<pre>{diagnostic}</pre>
 			</details>
+		{/if}
+		{#if usersConsoleUrl}
+			<a class="console-link" href={usersConsoleUrl} target="_blank" rel="noopener noreferrer">
+				Open Firebase users →
+			</a>
 		{/if}
 	{/if}
 
@@ -147,6 +153,15 @@
 		color: #aa2822;
 		font-size: 0.9rem;
 		line-height: 1.45;
+	}
+
+	.console-link {
+		display: inline-block;
+		margin-top: 10px;
+		color: var(--green);
+		font-size: 0.78rem;
+		font-weight: 780;
+		text-decoration: none;
 	}
 
 	.diagnostic {

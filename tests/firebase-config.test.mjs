@@ -82,19 +82,23 @@ test('resolves the account email from the token when the record has none', async
 	assert.equal(emailFromClaims({}), null);
 	assert.equal(emailFromClaims(undefined), null);
 
-	// Record carries the email: never touch the token.
+	// Record carries the email: the token is inspected once (the rules need to
+	// know it carries the claim) but never force-refreshed.
 	let tokenCalls = 0;
+	let forcedCalls = 0;
 	const withRecord = {
 		email: 'cid@example.com',
 		uid: 'uid-1',
 		providerData: [{ providerId: 'google.com' }],
-		getIdTokenResult: async () => {
+		getIdTokenResult: async (force) => {
 			tokenCalls += 1;
-			return { claims: { email: 'other@example.com' } };
+			if (force) forcedCalls += 1;
+			return { claims: { email: 'cid@example.com', email_verified: true } };
 		}
 	};
 	assert.equal(await resolveAccountEmail(withRecord), 'cid@example.com');
-	assert.equal(tokenCalls, 0);
+	assert.equal(tokenCalls, 1);
+	assert.equal(forcedCalls, 0);
 
 	// Record has no email (the failing production case): fall back to claims.
 	const recordWithoutEmail = {
@@ -288,4 +292,69 @@ test('the inspection reports the exact claims the published rules test', async (
 		getIdTokenResult: async () => ({ claims: { email: 'a@b.com', email_verified: 'true' } })
 	};
 	assert.equal((await inspectAccount(stringy)).emailVerified, 'not-boolean');
+});
+
+test('an account whose token has no email claim is caught, not sent to the rules', async () => {
+	const { resolveAccount, resolveAccountEmail } = await import('../src/lib/firebase/account.ts');
+
+	// Exactly the reported production state: provider entry has the email, the
+	// record has none, and the token minted for the account has no email claim.
+	let forcedRefreshes = 0;
+	const reported = {
+		email: null,
+		uid: 'sbULzZTXDKgNmmtgFRvm5nrduXn1',
+		providerData: [{ providerId: 'google.com', email: 'asencid07@gmail.com' }],
+		getIdTokenResult: async (force) => {
+			if (force) {
+				forcedRefreshes += 1;
+			}
+			return {
+				claims: {
+					aud: 'valet-07',
+					name: 'Cid',
+					picture: 'x',
+					sub: 'sbUL',
+					user_id: 'sbUL',
+					firebase: { sign_in_provider: 'google.com' }
+				}
+			};
+		}
+	};
+
+	const resolved = await resolveAccount(reported);
+	assert.equal(resolved.email, 'asencid07@gmail.com', 'identifiable from the provider entry');
+	assert.equal(resolved.tokenEmail, null, 'but the token carries no email claim');
+	assert.equal(forcedRefreshes, 1, 'one forced refresh is attempted before giving up');
+	assert.equal(await resolveAccountEmail(reported), 'asencid07@gmail.com');
+
+	// After the account is repaired, a refreshed token carries the claim.
+	const repaired = {
+		email: 'asencid07@gmail.com',
+		uid: 'uid-new',
+		providerData: [{ providerId: 'google.com', email: 'asencid07@gmail.com' }],
+		getIdTokenResult: async () => ({
+			claims: {
+				email: 'asencid07@gmail.com',
+				email_verified: true,
+				firebase: { sign_in_provider: 'google.com' }
+			}
+		})
+	};
+	const repairedResolved = await resolveAccount(repaired);
+	assert.equal(repairedResolved.email, 'asencid07@gmail.com');
+	assert.equal(repairedResolved.tokenEmail, 'asencid07@gmail.com');
+
+	// A record with an email never needs a forced refresh.
+	let refreshes = 0;
+	const healthy = {
+		email: 'cid@example.com',
+		uid: 'uid-healthy',
+		providerData: [{ providerId: 'google.com', email: 'cid@example.com' }],
+		getIdTokenResult: async (force) => {
+			if (force) refreshes += 1;
+			return { claims: { email: 'cid@example.com', email_verified: true } };
+		}
+	};
+	await resolveAccount(healthy);
+	assert.equal(refreshes, 0);
 });

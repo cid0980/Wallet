@@ -15,7 +15,7 @@ import {
 	describeAccount,
 	formatInspection,
 	inspectAccount,
-	resolveAccountEmail
+	resolveAccount
 } from '$lib/firebase/account';
 import { getFirebaseClient } from '$lib/firebase/client';
 import { firebaseErrorCode, shouldFallBackToRedirect } from '$lib/firebase/sign-in-strategy';
@@ -70,6 +70,16 @@ const REDIRECT_MARKER_MAX_AGE_MS = 10 * 60_000;
 const NO_EMAIL_MESSAGE =
 	'Google did not share an email address for this account, and Vault needs it to find your shared vault. Try Continue with Google again so the email scope is requested. If it repeats, check Firebase Console → Authentication → Settings → User actions → Email enumeration protection, and make sure Google sign-in is the provider you use.';
 
+/**
+ * The account is identifiable, but its ID token carries no email claim, so the
+ * published rules (which require request.auth.token.email) deny every read.
+ * This happens to accounts created while the app did not request the email
+ * scope. Deleting the account in the console and signing in again creates a
+ * clean record; the token is force-refreshed once before this is shown.
+ */
+const NO_TOKEN_EMAIL_MESSAGE =
+	'Google returned your email, but this Firebase account was created without one, so its sign-in token cannot satisfy the published security rules. Delete this account in Firebase Console → Authentication → Users and sign in again. If it repeats, turn off Authentication → Settings → User actions → Email enumeration protection.';
+
 let authUnsubscribe: Unsubscribe | undefined;
 let authStarted = false;
 let redirectWatchdog: ReturnType<typeof setTimeout> | undefined;
@@ -98,28 +108,30 @@ async function applyUser(user: User | null, redirectError: string | null): Promi
 		return;
 	}
 
-	const email = await resolveAccountEmail(user);
+	const { email, tokenEmail } = await resolveAccount(user);
 
 	if (sequence !== authSequence) {
 		// A newer auth event superseded this one.
 		return;
 	}
 
-	if (!email) {
+	if (!email || !tokenEmail) {
 		const inspection = await inspectAccount(user);
 		const diagnostic = formatInspection(inspection);
+		const message = email && !tokenEmail ? NO_TOKEN_EMAIL_MESSAGE : NO_EMAIL_MESSAGE;
 		console.info('[vault:auth] signed-in account has no usable email address', {
 			account: describeAccount(user),
+			identifiedBy: email ? 'record or provider, but the token carries no email claim' : 'nothing',
 			inspection
 		});
 
-		pendingNotice = NO_EMAIL_MESSAGE;
+		pendingNotice = message;
 		pendingDiagnostic = diagnostic;
 		authState.set({
 			status: 'error',
 			user: null,
 			email: null,
-			error: NO_EMAIL_MESSAGE,
+			error: message,
 			diagnostic
 		});
 
