@@ -78,7 +78,7 @@ const NO_EMAIL_MESSAGE =
  * clean record; the token is force-refreshed once before this is shown.
  */
 const NO_TOKEN_EMAIL_MESSAGE =
-	'Google returned your email, but this Firebase account was created without one, so its sign-in token cannot satisfy the published security rules. Delete this account in Firebase Console → Authentication → Users and sign in again. If it repeats, turn off Authentication → Settings → User actions → Email enumeration protection.';
+	'Google returned your email, but Firebase did not put it in this account: the account record and its sign-in token both have no email, and the published rules require one. Turn off Firebase Console → Authentication → Settings → User actions → Email enumeration protection, delete this account in Authentication → Users, then sign in again.';
 
 let authUnsubscribe: Unsubscribe | undefined;
 let authStarted = false;

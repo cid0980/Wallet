@@ -8,6 +8,7 @@
 	import VaultSetupForm from '$lib/components/setup/VaultSetupForm.svelte';
 	import {
 		FIRESTORE_RULES_FILE_URL,
+		authSettingsConsoleUrl,
 		authUsersConsoleUrl,
 		firestoreRulesConsoleUrl
 	} from '$lib/firebase/client';
@@ -39,6 +40,7 @@
 
 	const rulesConsoleUrl = firestoreRulesConsoleUrl();
 	const usersConsoleUrl = authUsersConsoleUrl();
+	const settingsConsoleUrl = authSettingsConsoleUrl();
 
 	/**
 	 * Runs when the vault lookup is refused: reads one document that never
@@ -271,6 +273,7 @@
 				error={$authState.error}
 				diagnostic={$authState.diagnostic}
 				usersConsoleUrl={usersConsoleUrl}
+				settingsConsoleUrl={settingsConsoleUrl}
 				onSignIn={signInWithGoogle}
 			/>
 		{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}

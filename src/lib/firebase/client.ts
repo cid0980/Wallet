@@ -81,6 +81,15 @@ export function authUsersConsoleUrl(): string | null {
 		: null;
 }
 
+/** Deep link to this project's Authentication settings, where the email
+ *  enumeration protection switch lives (Settings → User actions). */
+export function authSettingsConsoleUrl(): string | null {
+	const projectId = firebaseProjectId();
+	return projectId
+		? `https://console.firebase.google.com/project/${projectId}/authentication/settings`
+		: null;
+}
+
 /** The published rule set this app is built for. */
 export const FIRESTORE_RULES_FILE_URL =
 	'https://raw.githubusercontent.com/cid0980/Wallet/main/firestore.rules';
