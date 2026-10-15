@@ -118,9 +118,9 @@
 				<span class="spinner" aria-hidden="true"></span>
 				<p>Checking your secure Vault session…</p>
 			</section>
-		{:else if $authState.status === 'signed-out' || $authState.status === 'redirecting' || $authState.status === 'error'}
+		{:else if $authState.status === 'signed-out' || $authState.status === 'signing-in' || $authState.status === 'error'}
 			<GoogleLogin
-				busy={$authState.status === 'redirecting'}
+				busy={$authState.status === 'signing-in'}
 				error={$authState.error}
 				onSignIn={signInWithGoogle}
 			/>

@@ -42,7 +42,10 @@ export default defineConfig({
 			workbox: {
 				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,webmanifest}'],
 				additionalManifestEntries: [{ url: '/200.html', revision: null }],
-				navigateFallback: '/200.html'
+				navigateFallback: '/200.html',
+				// The Firebase Auth handler path must always reach the network.
+				// Caching or rewriting it would break Google sign-in.
+				navigateFallbackDenylist: [/^\/__\//]
 			},
 			kit: {
 				spa: {

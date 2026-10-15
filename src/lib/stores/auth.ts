@@ -2,6 +2,7 @@ import type { FirebaseError } from 'firebase/app';
 import {
 	getRedirectResult,
 	onAuthStateChanged,
+	signInWithPopup,
 	signInWithRedirect,
 	signOut,
 	type Auth,
@@ -11,8 +12,9 @@ import {
 import { writable } from 'svelte/store';
 
 import { getFirebaseClient } from '$lib/firebase/client';
+import { firebaseErrorCode, shouldFallBackToRedirect } from '$lib/firebase/sign-in-strategy';
 
-export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'redirecting' | 'error';
+export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'signing-in' | 'error';
 
 export interface AuthState {
 	status: AuthStatus;
@@ -33,6 +35,15 @@ export const authState = writable<AuthState>({
  */
 const REDIRECT_WATCHDOG_MS = 12_000;
 
+/**
+ * Written just before a full-page redirect and read when the page comes back.
+ * Without it, a redirect that returns with no session and no error is
+ * indistinguishable from a plain first page load — the silent loop this marker
+ * exists to break.
+ */
+const REDIRECT_MARKER_KEY = 'vault.auth.pending-redirect';
+const REDIRECT_MARKER_MAX_AGE_MS = 10 * 60_000;
+
 let authUnsubscribe: Unsubscribe | undefined;
 let authStarted = false;
 let redirectWatchdog: ReturnType<typeof setTimeout> | undefined;
@@ -40,11 +51,11 @@ let pageShowHandler: (() => void) | undefined;
 let lastRedirectError: string | null = null;
 
 function authErrorMessage(error: unknown): string {
-	const code = (error as Partial<FirebaseError>)?.code;
+	const code = firebaseErrorCode(error);
 
 	switch (code) {
 		case 'auth/unauthorized-domain':
-			return 'This site is not authorized in Firebase Authentication. Add its domain in Firebase Console → Authentication → Settings → Authorized domains.';
+			return 'This site is not authorized in Firebase Authentication. Add this exact origin in Firebase Console → Authentication → Settings → Authorized domains, then try again.';
 		case 'auth/operation-not-allowed':
 			return 'Google sign-in is not enabled for this Firebase project.';
 		case 'auth/invalid-api-key':
@@ -54,16 +65,58 @@ function authErrorMessage(error: unknown): string {
 		case 'auth/network-request-failed':
 			return 'Google sign-in needs an internet connection.';
 		case 'auth/popup-blocked':
-			return 'The browser blocked the Google window. Allow pop-ups for this site and try again.';
+			return 'The browser blocked the Google pop-up. Allow pop-ups for this site and try again.';
 		case 'auth/cancelled-popup-request':
 		case 'auth/popup-closed-by-user':
 			return 'Google sign-in was closed before it finished. Try again.';
 		case 'auth/web-storage-unsupported':
 			return 'This browser blocks the local storage Google sign-in needs. Leave private browsing or allow site data, then try again.';
 		case 'auth/internal-error':
-			return 'Google sign-in could not start. VITE_FIREBASE_AUTH_DOMAIN must be the Firebase auth domain (for example "your-project.firebaseapp.com"), not the deployed website URL.';
+			return 'Google sign-in could not start. VITE_FIREBASE_AUTH_DOMAIN must be the Firebase auth domain, for example "your-project.firebaseapp.com".';
 		default:
 			return error instanceof Error ? error.message : 'Google sign-in could not be completed.';
+	}
+}
+
+function redirectReturnMessage(): string {
+	const origin = typeof window === 'undefined' ? 'this site' : window.location.origin;
+	return `Google returned without completing the sign-in. Add ${origin} in Firebase Console → Authentication → Settings → Authorized domains, allow site data for this browser, and try again.`;
+}
+
+function markPendingRedirect(): void {
+	try {
+		window.localStorage.setItem(REDIRECT_MARKER_KEY, String(Date.now()));
+	} catch {
+		// Storage can be unavailable; the marker is a diagnostic aid only.
+	}
+}
+
+function clearPendingRedirect(): void {
+	try {
+		window.localStorage.removeItem(REDIRECT_MARKER_KEY);
+	} catch {
+		// Ignore: nothing to clean up when storage is blocked.
+	}
+}
+
+function hasFreshPendingRedirect(): boolean {
+	try {
+		const raw = window.localStorage.getItem(REDIRECT_MARKER_KEY);
+
+		if (!raw) {
+			return false;
+		}
+
+		const startedAt = Number(raw);
+
+		if (!Number.isFinite(startedAt) || Date.now() - startedAt > REDIRECT_MARKER_MAX_AGE_MS) {
+			clearPendingRedirect();
+			return false;
+		}
+
+		return true;
+	} catch {
+		return false;
 	}
 }
 
@@ -78,7 +131,7 @@ function clearRedirectWatchdog(): void {
 function releaseStuckRedirect(message: string | null): void {
 	clearRedirectWatchdog();
 	authState.update((state) =>
-		state.status === 'redirecting' ? { ...state, status: 'signed-out', error: message } : state
+		state.status === 'signing-in' ? { ...state, status: 'signed-out', error: message } : state
 	);
 }
 
@@ -98,17 +151,37 @@ function watchStuckRedirect(): void {
 
 /**
  * Collects the result of a redirect sign-in that this page load may not have
- * observed yet, and remembers the failure message for the next state change.
+ * observed yet. Returns the message to display when Google came back without a
+ * session, instead of leaving the user on a silent loop.
  */
 async function completePendingRedirect(auth: Auth): Promise<string | null> {
+	const wasPending = hasFreshPendingRedirect();
+
+	let credential: Awaited<ReturnType<typeof getRedirectResult>> = null;
+
 	try {
-		await getRedirectResult(auth);
-		lastRedirectError = null;
-		return null;
+		credential = await getRedirectResult(auth);
 	} catch (error) {
-		lastRedirectError = authErrorMessage(error);
-		return lastRedirectError;
+		clearPendingRedirect();
+		console.info('[vault:auth] redirect sign-in failed', firebaseErrorCode(error));
+		return authErrorMessage(error);
 	}
+
+	if (credential?.user || auth.currentUser) {
+		clearPendingRedirect();
+		return null;
+	}
+
+	if (wasPending) {
+		clearPendingRedirect();
+		console.info('[vault:auth] redirect returned without a session', {
+			origin: window.location.origin,
+			authDomain: auth.config.authDomain
+		});
+		return redirectReturnMessage();
+	}
+
+	return null;
 }
 
 export async function startAuthObserver(): Promise<void> {
@@ -124,6 +197,7 @@ export async function startAuthObserver(): Promise<void> {
 		await authPersistenceReady;
 
 		let redirectError = await completePendingRedirect(auth);
+		lastRedirectError = redirectError;
 
 		authUnsubscribe = onAuthStateChanged(
 			auth,
@@ -179,15 +253,16 @@ export async function startAuthObserver(): Promise<void> {
 	}
 }
 
-export async function signInWithGoogle(): Promise<void> {
+async function signInWithRedirectFallback(): Promise<void> {
+	const { auth, googleProvider } = getFirebaseClient();
+
 	try {
-		const { auth, googleProvider, authPersistenceReady } = getFirebaseClient();
-		await authPersistenceReady;
-		authState.update((state) => ({ ...state, status: 'redirecting', error: null }));
+		markPendingRedirect();
 		watchStuckRedirect();
 		await signInWithRedirect(auth, googleProvider);
 	} catch (error) {
 		clearRedirectWatchdog();
+		clearPendingRedirect();
 		authState.update((state) => ({
 			...state,
 			status: 'signed-out',
@@ -196,8 +271,46 @@ export async function signInWithGoogle(): Promise<void> {
 	}
 }
 
+/**
+ * Signs in with a Google pop-up.
+ *
+ * The pop-up is the reliable path: the result travels back through the pop-up
+ * window itself, so sign-in does not depend on the browser letting this site
+ * read storage belonging to <project>.firebaseapp.com. Safari, Firefox, and
+ * Chrome with third-party cookies blocked refuse that cross-site read, and the
+ * full-page redirect then returns with no user and no error. Environments that
+ * cannot show a pop-up fall back to the redirect flow automatically.
+ */
+export async function signInWithGoogle(): Promise<void> {
+	const { auth, googleProvider } = getFirebaseClient();
+	authState.update((state) => ({ ...state, status: 'signing-in', error: null }));
+
+	try {
+		const credential = await signInWithPopup(auth, googleProvider);
+		clearPendingRedirect();
+		authState.set({ status: 'signed-in', user: credential.user, error: null });
+		return;
+	} catch (error) {
+		const code = firebaseErrorCode(error);
+
+		if (!shouldFallBackToRedirect(error)) {
+			console.info('[vault:auth] pop-up sign-in failed', code);
+			authState.update((state) => ({
+				...state,
+				status: 'signed-out',
+				error: authErrorMessage(error)
+			}));
+			return;
+		}
+
+		console.info('[vault:auth] pop-up unavailable, using redirect instead', code);
+		await signInWithRedirectFallback();
+	}
+}
+
 export async function signOutOfVault(): Promise<void> {
 	const { auth } = getFirebaseClient();
+	clearPendingRedirect();
 	await signOut(auth);
 }
 
@@ -212,3 +325,6 @@ export function stopAuthObserver(): void {
 		pageShowHandler = undefined;
 	}
 }
+
+export { firebaseErrorCode };
+export type { FirebaseError };

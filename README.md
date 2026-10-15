@@ -197,4 +197,8 @@ Checklist when Google sign-in fails:
 4. The browser is not blocking storage or third-party cookies for the site.
 5. Check the GitHub Actions run for the deployed commit — the site is only updated when `verify` passes and the Vercel secrets are configured.
 
-Run `npm run test:unit` for the auth-domain regression tests and `npm run verify` before pushing.
+### "Google returns to the sign-in page with no error"
+
+That symptom means the redirect completed but this site was not allowed to read the sign-in result, usually because the browser blocks cross-site storage (Safari, Firefox, or Chrome with third-party cookies blocked). Vault now signs in with a Google pop-up first, which does not depend on that cross-site read, and falls back to the redirect flow only in environments that cannot show a pop-up. If the redirect fallback returns with no session, the sign-in screen now says so explicitly and names the exact origin that must be authorized instead of looping silently.
+
+Run `npm run test:unit` for the auth-domain and sign-in-strategy regression tests and `npm run verify` before pushing.
