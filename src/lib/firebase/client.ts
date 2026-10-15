@@ -21,6 +21,8 @@ import {
 	type Firestore
 } from 'firebase/firestore';
 
+import { normalizeAuthDomain } from '$lib/firebase/auth-domain';
+
 const firebaseEnvKeys = [
 	'VITE_FIREBASE_API_KEY',
 	'VITE_FIREBASE_AUTH_DOMAIN',
@@ -52,10 +54,12 @@ function requiredEnv(key: FirebaseEnvKey): string {
 }
 
 function firebaseOptions(): FirebaseOptions {
+	const projectId = requiredEnv('VITE_FIREBASE_PROJECT_ID');
+
 	return {
 		apiKey: requiredEnv('VITE_FIREBASE_API_KEY'),
-		authDomain: requiredEnv('VITE_FIREBASE_AUTH_DOMAIN'),
-		projectId: requiredEnv('VITE_FIREBASE_PROJECT_ID'),
+		authDomain: normalizeAuthDomain(requiredEnv('VITE_FIREBASE_AUTH_DOMAIN'), projectId),
+		projectId,
 		appId: requiredEnv('VITE_FIREBASE_APP_ID'),
 		messagingSenderId: requiredEnv('VITE_FIREBASE_MESSAGING_SENDER_ID')
 	};

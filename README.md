@@ -184,3 +184,17 @@ Complete these in a browser directly in Vercel and GitHub. Do not paste the valu
 - Add `localhost` for local development.
 - Add the final Vercel domain after the first production deployment.
 - Copy the complete current `firestore.rules` file into Firestore Database → Rules and publish it before recording payments or expenses in production.
+
+## Troubleshooting Google sign-in
+
+`VITE_FIREBASE_AUTH_DOMAIN` must be the **Firebase auth domain**, not the deployed website URL. Firebase sends the browser to `https://<VITE_FIREBASE_AUTH_DOMAIN>/__/auth/handler`, so a value like `https://your-app.vercel.app/` produces an unusable `https://https://your-app.vercel.app//__/auth/handler` and "Continue with Google" never reaches Google. `normalizeAuthDomain()` in `src/lib/firebase/client.ts` now repairs a pasted deployment URL, but the Vercel Production environment value should still be corrected to `your-project.firebaseapp.com`.
+
+Checklist when Google sign-in fails:
+
+1. Vercel → Project Settings → Environment Variables → `VITE_FIREBASE_AUTH_DOMAIN` is `your-project.firebaseapp.com` (no `https://`, no trailing slash). Redeploy after changing it, because Vite inlines these values at build time.
+2. Firebase Console → Authentication → Settings → Authorized domains contains every host the app runs on: `localhost`, `<project>.firebaseapp.com`, and the final `*.vercel.app` domain.
+3. Firebase Console → Authentication → Sign-in method → Google is enabled.
+4. The browser is not blocking storage or third-party cookies for the site.
+5. Check the GitHub Actions run for the deployed commit — the site is only updated when `verify` passes and the Vercel secrets are configured.
+
+Run `npm run test:unit` for the auth-domain regression tests and `npm run verify` before pushing.
