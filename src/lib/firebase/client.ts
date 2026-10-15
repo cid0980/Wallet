@@ -9,7 +9,6 @@ import {
 import {
 	browserLocalPersistence,
 	getAuth,
-	GoogleAuthProvider,
 	setPersistence,
 	type Auth
 } from 'firebase/auth';
@@ -37,7 +36,6 @@ export interface FirebaseClient {
 	app: FirebaseApp;
 	auth: Auth;
 	db: Firestore;
-	googleProvider: GoogleAuthProvider;
 	authPersistenceReady: Promise<void>;
 }
 
@@ -124,15 +122,6 @@ export function getFirebaseClient(): FirebaseClient {
 
 	const app = getApps().length > 0 ? getApp() : initializeApp(firebaseOptions());
 	const auth = getAuth(app);
-	const googleProvider = new GoogleAuthProvider();
-	// The SDK's GoogleAuthProvider requests only the "profile" scope by default.
-	// Without an explicit "email" scope Google may return an ID token with no
-	// email claim, which creates a Firebase user whose identifier is empty and
-	// leaves Vault nothing to find a shared vault with. Both scopes are
-	// non-sensitive and need no extra Google verification.
-	googleProvider.addScope('email');
-	googleProvider.addScope('profile');
-	googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 	let db: Firestore;
 
@@ -157,7 +146,6 @@ export function getFirebaseClient(): FirebaseClient {
 		app,
 		auth,
 		db,
-		googleProvider,
 		authPersistenceReady: setPersistence(auth, browserLocalPersistence)
 	};
 

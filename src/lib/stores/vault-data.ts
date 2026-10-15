@@ -5,6 +5,7 @@ import type {
 	ClientRecord,
 	ExpenseRecord,
 	PaymentRecord,
+	ProjectRecord,
 	VaultDataSnapshot,
 	VaultMutation
 } from '$lib/types/vault';
@@ -14,6 +15,7 @@ export type VaultDataStatus = 'idle' | 'loading' | 'ready' | 'error';
 export interface VaultDataState {
 	status: VaultDataStatus;
 	clients: ClientRecord[];
+	projects: ProjectRecord[];
 	payments: PaymentRecord[];
 	expenses: ExpenseRecord[];
 	mutations: VaultMutation[];
@@ -25,6 +27,7 @@ export interface VaultDataState {
 const initialState: VaultDataState = {
 	status: 'idle',
 	clients: [],
+	projects: [],
 	payments: [],
 	expenses: [],
 	mutations: [],
@@ -42,6 +45,7 @@ function updateFromSnapshot(snapshot: VaultDataSnapshot): void {
 	vaultData.set({
 		status: 'ready',
 		clients: snapshot.clients,
+		projects: snapshot.projects,
 		payments: snapshot.payments,
 		expenses: snapshot.expenses,
 		mutations: snapshot.mutations,

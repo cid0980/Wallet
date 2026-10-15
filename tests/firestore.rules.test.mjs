@@ -5,6 +5,7 @@ import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebas
 import {
 	collection,
 	deleteDoc,
+	deleteField,
 	doc,
 	getDoc,
 	getDocs,
@@ -79,10 +80,12 @@ function seededClient() {
 	};
 }
 
-function paymentFields(mutationId, amountPaise = 100_00, partner = 'a') {
+function paymentFields(mutationId, amountPaise = 100_00, partner = 'a', project = null) {
 	return {
 		clientId: 'client-acme',
 		clientName: 'Acme Studio',
+		projectId: project?.id ?? null,
+		projectName: project?.name ?? null,
 		amountPaise,
 		partner,
 		occurredOn: '2026-10-13',
@@ -112,7 +115,7 @@ function expenseFields(mutationId, amountPaise = 50_00, partner = 'b') {
 		clientName: null,
 		amountPaise,
 		partner,
-		category: 'Software',
+		tags: ['Software'],
 		occurredOn: '2026-10-13',
 		note: 'Subscription',
 		createdAt: serverTimestamp(),
@@ -368,4 +371,183 @@ test('does not allow a member to delete a client or mutate an audit record', asy
 	await assertFails(deleteDoc(doc(aliceDb, 'vaults', vaultId, 'clients', 'client-acme')));
 	await assertSucceeds(addValidPayment(aliceDb));
 	await assertFails(updateDoc(doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-1'), { summary: 'Tampered' }));
+});
+
+test('keeps pre-tags expense records editable and migrates them to tags', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	// A record saved before spending tags existed: one fixed category field.
+	await testEnvironment.withSecurityRulesDisabled(async (context) => {
+		await setDoc(doc(context.firestore(), 'vaults', vaultId, 'expenses', 'legacy-expense'), {
+			clientId: null,
+			clientName: null,
+			amountPaise: 50_00,
+			partner: 'b',
+			category: 'Software',
+			occurredOn: '2026-10-01',
+			note: 'Old shape',
+			createdAt: Timestamp.now(),
+			updatedAt: Timestamp.now(),
+			createdBy: aliceEmail,
+			updatedBy: aliceEmail,
+			lastMutationId: 'legacy-mutation'
+		});
+	});
+
+	const batch = writeBatch(aliceDb);
+	const delta = { earned: 0, spent: 0, aReceived: 0, bReceived: 0, aSpent: 0, bSpent: 0 };
+	batch.update(doc(aliceDb, 'vaults', vaultId, 'expenses', 'legacy-expense'), {
+		clientId: null,
+		clientName: null,
+		amountPaise: 50_00,
+		partner: 'b',
+		tags: ['Software', 'Hosting'],
+		occurredOn: '2026-10-01',
+		note: 'Old shape',
+		category: deleteField(),
+		updatedAt: serverTimestamp(),
+		updatedBy: aliceEmail,
+		lastMutationId: 'mutation-migrate'
+	});
+	batch.set(
+		doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-migrate'),
+		mutationFields('mutation-migrate', 'expense-update', 'legacy-expense', delta)
+	);
+	updateVaultForDelta(batch, aliceDb, 'mutation-migrate', delta);
+	await assertSucceeds(batch.commit());
+});
+
+test('lets members edit the shared spending tags without touching money', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	const eveDb = nonMemberDb(eveEmail);
+
+	await assertSucceeds(
+		updateDoc(doc(aliceDb, 'vaults', vaultId), {
+			tags: ['Software', 'Hosting', 'Travel'],
+			updatedAt: serverTimestamp()
+		})
+	);
+
+	// A tags edit that also nudges totals is refused.
+	await assertFails(
+		updateDoc(doc(aliceDb, 'vaults', vaultId), {
+			tags: ['Software'],
+			'totals.earned': increment(500_00),
+			updatedAt: serverTimestamp()
+		})
+	);
+
+	// At least one tag, each tag a short string.
+	await assertFails(
+		updateDoc(doc(aliceDb, 'vaults', vaultId), {
+			tags: [],
+			updatedAt: serverTimestamp()
+		})
+	);
+
+	// A non-member may not edit the list.
+	await assertFails(
+		updateDoc(doc(eveDb, 'vaults', vaultId), {
+			tags: ['Hacked'],
+			updatedAt: serverTimestamp()
+		})
+	);
+});
+
+test('still accepts a money batch after spending tags exist on the vault', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	await assertSucceeds(
+		updateDoc(doc(aliceDb, 'vaults', vaultId), {
+			tags: ['Software', 'Hosting'],
+			updatedAt: serverTimestamp()
+		})
+	);
+	await assertSucceeds(addValidPayment(aliceDb));
+});
+
+test('allows members to run projects and edit the estimated price', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	const eveDb = nonMemberDb(eveEmail);
+	const projectDoc = doc(aliceDb, 'vaults', vaultId, 'projects', 'project-site');
+	const project = {
+		name: 'Website build',
+		clientId: 'client-acme',
+		clientName: 'Acme Studio',
+		estimatedPaise: 6000000,
+		status: 'active',
+		note: 'Two pages left',
+		createdAt: serverTimestamp(),
+		updatedAt: serverTimestamp(),
+		createdBy: aliceEmail,
+		updatedBy: aliceEmail
+	};
+
+	await assertSucceeds(setDoc(projectDoc, project));
+	await assertFails(setDoc(doc(eveDb, 'vaults', vaultId, 'projects', 'project-evil'), project));
+
+	// Any member may revise the estimate; the edit must say who made it.
+	await assertSucceeds(
+		updateDoc(projectDoc, {
+			estimatedPaise: 7500000,
+			updatedAt: serverTimestamp(),
+			updatedBy: aliceEmail
+		})
+	);
+
+	// "edited by who" is not optional: the editor cannot be forged.
+	await assertFails(
+		updateDoc(projectDoc, {
+			estimatedPaise: 1,
+			updatedAt: serverTimestamp(),
+			updatedBy: eveEmail
+		})
+	);
+
+	// An estimate is a money amount, and a forged status is refused.
+	await assertFails(
+		updateDoc(projectDoc, {
+			estimatedPaise: -5,
+			updatedAt: serverTimestamp(),
+			updatedBy: aliceEmail
+		})
+	);
+	await assertFails(
+		updateDoc(projectDoc, {
+			status: 'archived',
+			updatedAt: serverTimestamp(),
+			updatedBy: aliceEmail
+		})
+	);
+
+	await assertSucceeds(deleteDoc(projectDoc));
+});
+
+test('accepts a payment batch linked to a project', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	await testEnvironment.withSecurityRulesDisabled(async (context) => {
+		await setDoc(doc(context.firestore(), 'vaults', vaultId, 'projects', 'project-site'), {
+			name: 'Website build',
+			clientId: 'client-acme',
+			clientName: 'Acme Studio',
+			estimatedPaise: 6000000,
+			status: 'active',
+			note: '',
+			createdAt: Timestamp.now(),
+			updatedAt: Timestamp.now(),
+			createdBy: aliceEmail,
+			updatedBy: aliceEmail
+		});
+	});
+
+	const batch = writeBatch(aliceDb);
+	const delta = paymentDelta(100_00);
+	batch.set(
+		doc(aliceDb, 'vaults', vaultId, 'payments', 'payment-project'),
+		paymentFields('mutation-project', 100_00, 'a', { id: 'project-site', name: 'Website build' })
+	);
+	batch.set(
+		doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-project'),
+		mutationFields('mutation-project', 'payment-create', 'payment-project', delta)
+	);
+	updateVaultForDelta(batch, aliceDb, 'mutation-project', delta);
+	await assertSucceeds(batch.commit());
 });

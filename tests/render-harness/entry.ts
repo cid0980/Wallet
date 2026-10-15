@@ -25,6 +25,7 @@ const vault = {
 		b: { name: 'Partner Two', email: 'two@example.com' }
 	},
 	totals: { earned: 0, spent: 0, a: { received: 0, spent: 0 }, b: { received: 0, spent: 0 } },
+	tags: ['Advertising', 'Contractor', 'Equipment', 'Office', 'Software', 'Travel', 'Other'],
 	lastMutationId: null,
 	createdAt: new Date(),
 	updatedAt: new Date(),
@@ -35,6 +36,7 @@ const vault = {
 const readyData = {
 	status: 'ready',
 	clients: [],
+	projects: [],
 	payments: [],
 	expenses: [],
 	mutations: [],
@@ -75,11 +77,41 @@ const busyData = {
 		createdBy: 'cid@example.com',
 		updatedBy: 'cid@example.com'
 	})),
+	projects: [
+		{
+			id: 'project-1',
+			name: 'Website build',
+			clientId: 'client-0',
+			clientName: 'Client 1',
+			estimatedPaise: 6000000,
+			status: 'active',
+			note: 'Two pages left',
+			createdAt: new Date(),
+			updatedAt: new Date(),
+			createdBy: 'cid@example.com',
+			updatedBy: 'two@example.com'
+		},
+		{
+			id: 'project-2',
+			name: 'Logo set',
+			clientId: 'client-1',
+			clientName: 'Client 2',
+			estimatedPaise: 100000,
+			status: 'done',
+			note: '',
+			createdAt: new Date(),
+			updatedAt: new Date(),
+			createdBy: 'two@example.com',
+			updatedBy: 'two@example.com'
+		}
+	],
 	payments: [
 		{
 			id: 'payment-1',
 			clientId: 'client-0',
 			clientName: 'Client 1',
+			projectId: 'project-1',
+			projectName: 'Website build',
 			amountPaise: 1500000,
 			partner: 'a',
 			occurredOn: '2026-10-14',
@@ -98,7 +130,7 @@ const busyData = {
 			clientName: null,
 			amountPaise: 250000,
 			partner: 'b',
-			category: 'Software',
+			tags: ['Software', 'Hosting'],
 			occurredOn: '2026-10-13',
 			note: 'Editor licence',
 			createdAt: new Date(),
@@ -149,6 +181,44 @@ const scenarios: Scenario[] = [
 	{ name: 'empty workspace invites the first payment', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'Nothing recorded yet' },
 	{ name: 'offline workspace says so', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault: { ...busyVault, fromCache: true } }, data: { ...busyData, fromCache: true }, expect: 'Offline' },
 	{ name: 'no clients yet', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault }, data: { ...busyData, clients: [], payments: [], mutations: [] }, expect: 'Latest changes' },
+	{
+		name: 'home shows project progress',
+		auth: { status: 'signed-in', user, email: user.email, error: null },
+		session: { status: 'ready', vault },
+		data: busyData,
+		expect: 'received of'
+	},
+	{
+		name: 'project closes in on its estimate',
+		auth: { status: 'signed-in', user, email: user.email, error: null },
+		session: { status: 'ready', vault },
+		data: {
+			...busyData,
+			projects: busyData.projects.map((project) => (project.id === 'project-1' ? { ...project, estimatedPaise: 1500000 } : project))
+		},
+		expect: 'Complete'
+	},
+	{
+		name: 'expenses show spending tags',
+		auth: { status: 'signed-in', user, email: user.email, error: null },
+		session: { status: 'ready', vault },
+		data: busyData,
+		expect: 'Software'
+	},
+	{
+		name: 'project records who edited the estimate',
+		auth: { status: 'signed-in', user, email: user.email, error: null },
+		session: { status: 'ready', vault },
+		data: busyData,
+		expect: 'two@example.com'
+	},
+	{
+		name: 'empty projects invite the first one',
+		auth: { status: 'signed-in', user, email: user.email, error: null },
+		session: { status: 'ready', vault },
+		data: { ...busyData, projects: [] },
+		expect: 'No projects yet'
+	},
 	{ name: 'signed-in without email (raw state)', auth: { status: 'signed-in', user: { ...user, email: null }, email: null, error: null }, session: { status: 'ready', vault }, data: readyData, expect: 'did not finish starting' },
 	{ name: 'ready session without vault', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'ready', vault: null }, data: readyData, expect: 'did not finish starting' },
 	{ name: 'records ready before session', auth: { status: 'signed-in', user, email: user.email, error: null }, session: { status: 'no-vault' }, data: readyData, expect: 'Create the shared vault' },

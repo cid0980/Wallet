@@ -1,6 +1,8 @@
 import type { FirebaseError } from 'firebase/app';
 import {
 	collection,
+	deleteDoc,
+	deleteField,
 	doc,
 	increment,
 	onSnapshot,
@@ -27,12 +29,15 @@ import type {
 	PartnerKey,
 	PaymentInput,
 	PaymentRecord,
+	ProjectInput,
+	ProjectRecord,
+	ProjectStatus,
 	VaultDataSnapshot,
 	VaultMutation,
 	VaultSummary,
 	VaultTotals
 } from '$lib/types/vault';
-import { expenseCategories } from '$lib/types/vault';
+import { MAX_EXPENSE_TAGS, MAX_TAG_LENGTH, MAX_VAULT_TAGS } from '$lib/types/vault';
 import { formatPaise, isValidPaise } from '$lib/utils/money';
 import { isDateKey } from '$lib/utils/dates';
 
@@ -60,10 +65,38 @@ function asPartner(value: unknown): PartnerKey {
 	return value === 'b' ? 'b' : 'a';
 }
 
-function asExpenseCategory(value: unknown): ExpenseRecord['category'] {
-	return expenseCategories.includes(value as ExpenseRecord['category'])
-		? (value as ExpenseRecord['category'])
-		: 'Other';
+function asTags(value: unknown, maximum = MAX_EXPENSE_TAGS): string[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	const seen = new Set<string>();
+	const tags: string[] = [];
+
+	for (const entry of value) {
+		if (typeof entry !== 'string') {
+			continue;
+		}
+
+		const tag = cleanText(entry, MAX_TAG_LENGTH);
+		if (!tag) {
+			continue;
+		}
+
+		const key = tag.toLowerCase();
+		if (seen.has(key)) {
+			continue;
+		}
+
+		seen.add(key);
+		tags.push(tag);
+
+		if (tags.length >= maximum) {
+			break;
+		}
+	}
+
+	return tags;
 }
 
 function cleanText(value: string, maximum: number): string {
@@ -104,14 +137,52 @@ function assertPositivePaise(value: number): number {
 	return value;
 }
 
+function assertEstimatePaise(value: number): number {
+	if (!isValidPaise(value) || value < 0) {
+		throw new Error('Enter an estimated price of ₹0 or more.');
+	}
+
+	return value;
+}
+
 function assertActorEmail(actorEmail: string): string {
 	const email = actorEmail.trim();
 
 	if (!email) {
-		throw new Error('Your Google account did not provide an email address.');
+		throw new Error('Your account did not provide an email address.');
 	}
 
 	return email;
+}
+
+function cleanTags(tags: string[], label: string, maximum: number, verb = 'Pick'): string[] {
+	const seen = new Set<string>();
+	const result: string[] = [];
+
+	for (const raw of tags) {
+		const tag = cleanText(typeof raw === 'string' ? raw : '', MAX_TAG_LENGTH);
+		if (!tag) {
+			continue;
+		}
+
+		const key = tag.toLowerCase();
+		if (seen.has(key)) {
+			continue;
+		}
+
+		seen.add(key);
+		result.push(tag);
+	}
+
+	if (!result.length) {
+		throw new Error(`${verb} at least one ${label}.`);
+	}
+
+	if (result.length > maximum) {
+		throw new Error(`Use at most ${maximum} ${label}s.`);
+	}
+
+	return result;
 }
 
 function emptyDelta(): MutationDelta {
@@ -159,9 +230,18 @@ function cleanPaymentInput(input: PaymentInput): PaymentInput {
 		throw new Error('Choose a client for this payment.');
 	}
 
+	const projectId = input.projectId ? cleanText(input.projectId, 160) : '';
+	const projectName = input.projectName ? cleanText(input.projectName, MAX_NAME_LENGTH) : '';
+
+	if (projectId && !projectName) {
+		throw new Error('That project is missing its name. Refresh and try again.');
+	}
+
 	return {
 		clientId,
 		clientName,
+		projectId: projectId || null,
+		projectName: projectId ? projectName : null,
 		amountPaise: assertPositivePaise(input.amountPaise),
 		partner: assertPartner(input.partner),
 		occurredOn: assertDate(input.occurredOn),
@@ -170,7 +250,6 @@ function cleanPaymentInput(input: PaymentInput): PaymentInput {
 }
 
 function cleanExpenseInput(input: ExpenseInput): ExpenseInput {
-	const category = expenseCategories.includes(input.category) ? input.category : 'Other';
 	const clientId = input.clientId ? cleanText(input.clientId, 160) : null;
 	const clientName = input.clientName ? cleanText(input.clientName, MAX_NAME_LENGTH) : null;
 
@@ -179,8 +258,25 @@ function cleanExpenseInput(input: ExpenseInput): ExpenseInput {
 		clientName: clientId && clientName ? clientName : null,
 		amountPaise: assertPositivePaise(input.amountPaise),
 		partner: assertPartner(input.partner),
-		category,
+		tags: cleanTags(input.tags, 'tag', MAX_EXPENSE_TAGS),
 		occurredOn: assertDate(input.occurredOn),
+		note: assertText(input.note, 'a note')
+	};
+}
+
+function cleanProjectInput(input: ProjectInput): ProjectInput {
+	const clientId = cleanText(input.clientId, 160);
+	const clientName = assertText(input.clientName, 'a client', MAX_NAME_LENGTH, true);
+
+	if (!clientId) {
+		throw new Error('Choose a client for this project.');
+	}
+
+	return {
+		name: assertText(input.name, 'a project name', MAX_NAME_LENGTH, true),
+		clientId,
+		clientName,
+		estimatedPaise: assertEstimatePaise(input.estimatedPaise),
 		note: assertText(input.note, 'a note')
 	};
 }
@@ -203,9 +299,9 @@ function ensureVaultTotals(vault: VaultSummary): VaultTotals {
 	return totals;
 }
 
-function mutationSummary(kind: MutationKind, amountPaise: number, clientName: string | null, category?: string): string {
+function mutationSummary(kind: MutationKind, amountPaise: number, clientName: string | null, tags?: string[]): string {
 	const amount = formatPaise(amountPaise);
-	const subject = clientName ? ` · ${clientName}` : category ? ` · ${category}` : '';
+	const subject = clientName ? ` · ${clientName}` : tags?.length ? ` · ${tags.join(' / ')}` : '';
 
 	switch (kind) {
 		case 'payment-create':
@@ -290,12 +386,31 @@ export function toClientRecord(snapshot: QueryDocumentSnapshot<DocumentData>): C
 	};
 }
 
+export function toProjectRecord(snapshot: QueryDocumentSnapshot<DocumentData>): ProjectRecord {
+	const data = snapshot.data();
+	return {
+		id: snapshot.id,
+		name: asString(data.name, 'Untitled project'),
+		clientId: asString(data.clientId),
+		clientName: asString(data.clientName, 'Unknown client'),
+		estimatedPaise: asPaise(data.estimatedPaise),
+		status: data.status === 'done' ? 'done' : 'active',
+		note: asString(data.note),
+		createdAt: asDate(data.createdAt),
+		updatedAt: asDate(data.updatedAt),
+		createdBy: asString(data.createdBy),
+		updatedBy: asString(data.updatedBy)
+	};
+}
+
 export function toPaymentRecord(snapshot: QueryDocumentSnapshot<DocumentData>): PaymentRecord {
 	const data = snapshot.data();
 	return {
 		id: snapshot.id,
 		clientId: asString(data.clientId),
 		clientName: asString(data.clientName, 'Unknown client'),
+		projectId: typeof data.projectId === 'string' && data.projectId ? data.projectId : null,
+		projectName: typeof data.projectName === 'string' && data.projectName ? data.projectName : null,
 		amountPaise: asPaise(data.amountPaise),
 		partner: asPartner(data.partner),
 		occurredOn: asString(data.occurredOn),
@@ -310,13 +425,17 @@ export function toPaymentRecord(snapshot: QueryDocumentSnapshot<DocumentData>): 
 
 export function toExpenseRecord(snapshot: QueryDocumentSnapshot<DocumentData>): ExpenseRecord {
 	const data = snapshot.data();
+	const tags = asTags(data.tags);
+	// Records saved before spending tags carried one fixed category.
+	const legacyTags = tags.length ? tags : asString(data.category) ? [asString(data.category)] : ['Other'];
+
 	return {
 		id: snapshot.id,
 		clientId: typeof data.clientId === 'string' ? data.clientId : null,
 		clientName: typeof data.clientName === 'string' ? data.clientName : null,
 		amountPaise: asPaise(data.amountPaise),
 		partner: asPartner(data.partner),
-		category: asExpenseCategory(data.category),
+		tags: legacyTags,
 		occurredOn: asString(data.occurredOn),
 		note: asString(data.note),
 		createdAt: asDate(data.createdAt),
@@ -361,6 +480,7 @@ export function subscribeToVaultData(
 ): Unsubscribe {
 	const { db } = getFirebaseClient();
 	const clientMap = new Map<string, ClientRecord>();
+	const projectMap = new Map<string, ProjectRecord>();
 	const paymentMap = new Map<string, PaymentRecord>();
 	const expenseMap = new Map<string, ExpenseRecord>();
 	const mutationMap = new Map<string, VaultMutation>();
@@ -368,12 +488,9 @@ export function subscribeToVaultData(
 	const pendingStates = new Map<string, boolean>();
 
 	const emit = () => {
-		if (clientMap.size === -1) {
-			return;
-		}
-
 		onData({
 			clients: [...clientMap.values()],
+			projects: [...projectMap.values()],
 			payments: [...paymentMap.values()],
 			expenses: [...expenseMap.values()],
 			mutations: [...mutationMap.values()],
@@ -408,6 +525,12 @@ export function subscribeToVaultData(
 			query(collection(db, 'vaults', vaultId, 'clients'), orderBy('updatedAt', 'desc')),
 			clientMap,
 			toClientRecord
+		),
+		attach(
+			'projects',
+			query(collection(db, 'vaults', vaultId, 'projects'), orderBy('updatedAt', 'desc')),
+			projectMap,
+			toProjectRecord
 		),
 		attach(
 			'payments',
@@ -483,6 +606,73 @@ export async function setClientArchived(
 		isArchived,
 		updatedAt: serverTimestamp(),
 		updatedBy: assertActorEmail(actorEmail)
+	});
+}
+
+export async function createProject(vaultId: string, input: ProjectInput, actorEmail: string): Promise<void> {
+	const { db } = getFirebaseClient();
+	const clean = cleanProjectInput(input);
+	const actor = assertActorEmail(actorEmail);
+	const projectRef = doc(collection(db, 'vaults', vaultId, 'projects'));
+
+	await setDoc(projectRef, {
+		...clean,
+		status: 'active',
+		createdAt: serverTimestamp(),
+		updatedAt: serverTimestamp(),
+		createdBy: actor,
+		updatedBy: actor
+	});
+}
+
+export async function updateProject(
+	vaultId: string,
+	project: ProjectRecord,
+	input: ProjectInput,
+	actorEmail: string
+): Promise<void> {
+	const { db } = getFirebaseClient();
+	const clean = cleanProjectInput(input);
+
+	await updateDoc(doc(db, 'vaults', vaultId, 'projects', project.id), {
+		...clean,
+		updatedAt: serverTimestamp(),
+		updatedBy: assertActorEmail(actorEmail)
+	});
+}
+
+export async function setProjectStatus(
+	vaultId: string,
+	projectId: string,
+	status: ProjectStatus,
+	actorEmail: string
+): Promise<void> {
+	const { db } = getFirebaseClient();
+
+	if (status !== 'active' && status !== 'done') {
+		throw new Error('That project status is not valid.');
+	}
+
+	await updateDoc(doc(db, 'vaults', vaultId, 'projects', projectId), {
+		status,
+		updatedAt: serverTimestamp(),
+		updatedBy: assertActorEmail(actorEmail)
+	});
+}
+
+export async function deleteProject(vaultId: string, projectId: string, actorEmail: string): Promise<void> {
+	const { db } = getFirebaseClient();
+	assertActorEmail(actorEmail);
+	await deleteDoc(doc(db, 'vaults', vaultId, 'projects', projectId));
+}
+
+export async function updateVaultTags(vaultId: string, tags: string[], actorEmail: string): Promise<void> {
+	const { db } = getFirebaseClient();
+	assertActorEmail(actorEmail);
+
+	await updateDoc(doc(db, 'vaults', vaultId), {
+		tags: cleanTags(tags, 'tag', MAX_VAULT_TAGS, 'Keep'),
+		updatedAt: serverTimestamp()
 	});
 }
 
@@ -606,7 +796,7 @@ export async function createExpense(vault: VaultSummary, input: ExpenseInput, ac
 		expenseRef.id,
 		delta,
 		actor,
-		mutationSummary('expense-create', clean.amountPaise, clean.clientName, clean.category)
+		mutationSummary('expense-create', clean.amountPaise, clean.clientName, clean.tags)
 	);
 	updateVaultTotals(batch, vault.id, mutationId, delta);
 	await batch.commit();
@@ -629,6 +819,8 @@ export async function updateExpense(
 
 	batch.update(expenseRef, {
 		...clean,
+		// Records saved before spending tags carried one fixed category field.
+		category: deleteField(),
 		updatedAt: serverTimestamp(),
 		updatedBy: actor,
 		lastMutationId: mutationId
@@ -642,7 +834,7 @@ export async function updateExpense(
 		expense.id,
 		delta,
 		actor,
-		mutationSummary('expense-update', clean.amountPaise, clean.clientName, clean.category)
+		mutationSummary('expense-update', clean.amountPaise, clean.clientName, clean.tags)
 	);
 	updateVaultTotals(batch, vault.id, mutationId, delta);
 	await batch.commit();
@@ -666,7 +858,7 @@ export async function deleteExpense(vault: VaultSummary, expense: ExpenseRecord,
 		expense.id,
 		delta,
 		actor,
-		mutationSummary('expense-delete', expense.amountPaise, expense.clientName, expense.category)
+		mutationSummary('expense-delete', expense.amountPaise, expense.clientName, expense.tags)
 	);
 	updateVaultTotals(batch, vault.id, mutationId, delta);
 	await batch.commit();
@@ -677,7 +869,7 @@ export function vaultDataErrorMessage(error: unknown): string {
 
 	switch (code) {
 		case 'permission-denied':
-			return 'Vault could not save that change. Deploy the full Firestore rules after this update.';
+			return 'Vault could not save that change. Publish the current firestore.rules from the repository, then try again.';
 		case 'unavailable':
 			return 'Vault is offline. Your change will save when a connection is available.';
 		case 'failed-precondition':

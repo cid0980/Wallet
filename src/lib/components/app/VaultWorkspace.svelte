@@ -6,12 +6,17 @@
 		createClient,
 		createExpense,
 		createPayment,
+		createProject,
 		deleteExpense,
 		deletePayment,
+		deleteProject,
 		setClientArchived,
+		setProjectStatus,
 		updateClient,
 		updateExpense,
 		updatePayment,
+		updateProject,
+		updateVaultTags,
 		vaultDataErrorMessage
 	} from '$lib/services/vault-data';
 	import { vaultData } from '$lib/stores/vault-data';
@@ -20,10 +25,11 @@
 		ExpenseRecord,
 		PartnerKey,
 		PaymentRecord,
+		ProjectRecord,
 		VaultMutation,
 		VaultSummary
 	} from '$lib/types/vault';
-	import { expenseCategories } from '$lib/types/vault';
+	import { MAX_EXPENSE_TAGS, MAX_VAULT_TAGS } from '$lib/types/vault';
 	import {
 		formatDateKey,
 		formatDateTime,
@@ -33,8 +39,8 @@
 	} from '$lib/utils/dates';
 	import { formatPaise, formatPaiseInput, netPaise, parseMoneyToPaise } from '$lib/utils/money';
 
-	type MainTab = 'home' | 'clients' | 'payments' | 'expenses' | 'more';
-	type Composer = 'none' | 'client' | 'payment' | 'expense';
+	type MainTab = 'home' | 'clients' | 'projects' | 'payments' | 'expenses' | 'more';
+	type Composer = 'none' | 'client' | 'project' | 'payment' | 'expense';
 	type MorePanel = 'history' | 'settings';
 	type DateMode = 'today' | 'yesterday' | 'custom';
 
@@ -69,14 +75,23 @@
 	let paymentDateMode: DateMode = 'today';
 	let paymentNote = '';
 
+	let editingProject: ProjectRecord | null = null;
+	let projectName = '';
+	let projectClientId = '';
+	let projectEstimate = '';
+	let projectNote = '';
+
 	let editingExpense: ExpenseRecord | null = null;
 	let expenseClientId = '';
 	let expenseAmount = '';
 	let expensePartner: PartnerKey = 'a';
-	let expenseCategory: (typeof expenseCategories)[number] = expenseCategories[0];
+	let expenseTags: string[] = [];
 	let expenseDate = todayDateKey();
 	let expenseDateMode: DateMode = 'today';
 	let expenseNote = '';
+
+	let paymentProjectId = '';
+	let tagDraft = '';
 
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -98,7 +113,33 @@
 		{ value: 'b', label: vault.members.b.name, initial: initial(vault.members.b.name) }
 	] satisfies ChipOption[];
 
-	$: categoryOptions = expenseCategories.map((category) => ({ value: category, label: category }));
+	$: vaultTagOptions = vault.tags.map((tag) => ({ value: tag, label: tag }));
+
+	$: tagOptions = (() => {
+		const seen = new Set<string>();
+		const list: string[] = [];
+		for (const tag of [...vault.tags, ...expenseTags]) {
+			const key = tag.toLowerCase();
+			if (!seen.has(key)) {
+				seen.add(key);
+				list.push(tag);
+			}
+		}
+		return list;
+	})();
+
+	$: activeProjects = $vaultData.projects.filter((project) => project.status === 'active');
+	$: selectedPaymentProject = $vaultData.projects.find((project) => project.id === paymentProjectId) ?? null;
+
+	$: paidByProject = (() => {
+		const paid: Record<string, number> = {};
+		for (const payment of $vaultData.payments) {
+			if (payment.projectId) {
+				paid[payment.projectId] = (paid[payment.projectId] ?? 0) + payment.amountPaise;
+			}
+		}
+		return paid;
+	})();
 
 	$: paymentClientOptions = activeClients.map((client) => ({ value: client.id, label: client.name }));
 
@@ -116,9 +157,12 @@
 		: $vaultData.payments;
 	$: filteredExpenses = needle
 		? $vaultData.expenses.filter((expense) =>
-				matches(needle, expense.category, expense.clientName, expense.note, partnerName(expense.partner), formatPaise(expense.amountPaise))
+				matches(needle, expense.tags.join(' '), expense.clientName, expense.note, partnerName(expense.partner), formatPaise(expense.amountPaise))
 			)
 		: $vaultData.expenses;
+	$: filteredProjects = needle
+		? $vaultData.projects.filter((project) => matches(needle, project.name, project.clientName, project.note))
+		: $vaultData.projects;
 
 	function initial(value: string): string {
 		return value.trim().slice(0, 1).toUpperCase() || '•';
@@ -216,6 +260,7 @@
 
 		editingPayment = payment;
 		paymentClientId = payment?.clientId ?? activeClients[0]?.id ?? '';
+		paymentProjectId = payment?.projectId ?? '';
 		paymentAmount = payment ? formatPaiseInput(payment.amountPaise) : '';
 		paymentPartner = payment?.partner ?? ownPartner;
 		paymentDate = payment?.occurredOn ?? todayDateKey();
@@ -230,11 +275,29 @@
 		expenseClientId = expense?.clientId ?? '';
 		expenseAmount = expense ? formatPaiseInput(expense.amountPaise) : '';
 		expensePartner = expense?.partner ?? ownPartner;
-		expenseCategory = expense?.category ?? expenseCategories[0];
+		expenseTags = expense?.tags?.length ? [...expense.tags] : vault.tags.slice(0, 1);
 		expenseDate = expense?.occurredOn ?? todayDateKey();
 		expenseDateMode = dateModeFor(expenseDate);
 		expenseNote = expense?.note ?? '';
 		composer = 'expense';
+	}
+
+	function openProjectComposer(project: ProjectRecord | null = null): void {
+		actionError = null;
+
+		if (!project && activeClients.length === 0) {
+			say('Add a client first — every project belongs to one.', 'error');
+			switchTab('clients');
+			openClientComposer();
+			return;
+		}
+
+		editingProject = project;
+		projectName = project?.name ?? '';
+		projectClientId = project?.clientId ?? activeClients[0]?.id ?? '';
+		projectEstimate = project ? formatPaiseInput(project.estimatedPaise) : '';
+		projectNote = project?.note ?? '';
+		composer = 'project';
 	}
 
 	function closeComposer(): void {
@@ -290,6 +353,8 @@
 			const input = {
 				clientId: selectedPaymentClient.id,
 				clientName: selectedPaymentClient.name,
+				projectId: selectedPaymentProject?.id ?? null,
+				projectName: selectedPaymentProject?.name ?? null,
 				amountPaise: parseMoneyToPaise(paymentAmount),
 				partner: paymentPartner,
 				occurredOn: paymentDate,
@@ -305,6 +370,14 @@
 				closeComposer();
 				say(`${formatPaise(input.amountPaise)} received from ${selectedPaymentClient.name}.`);
 			}
+
+			if (input.projectId) {
+				const paidAfter =
+					$vaultData.payments
+						.filter((payment) => payment.projectId === input.projectId && payment.id !== editingPayment?.id)
+						.reduce((sum, payment) => sum + payment.amountPaise, 0) + input.amountPaise;
+				await completeProjectIfCovered(input.projectId, paidAfter);
+			}
 		});
 	}
 
@@ -316,7 +389,7 @@
 				clientName: selectedExpenseClient?.name ?? null,
 				amountPaise: parseMoneyToPaise(expenseAmount),
 				partner: expensePartner,
-				category: expenseCategory,
+				tags: expenseTags,
 				occurredOn: expenseDate,
 				note: expenseNote
 			};
@@ -358,10 +431,127 @@
 	function removeExpense(expense: ExpenseRecord): void {
 		confirmation = {
 			title: 'Delete this expense?',
-			message: `${formatPaise(expense.amountPaise)} for ${expense.category} will be removed from the balance and history.`,
+			message: `${formatPaise(expense.amountPaise)} for ${expense.tags.join(' / ')} will be removed from the balance and history.`,
 			confirmLabel: 'Delete expense',
 			run: () => deleteExpense(vault, expense, user.email ?? '')
 		};
+	}
+
+	async function saveProject(event: SubmitEvent): Promise<void> {
+		event.preventDefault();
+		await runAction(async () => {
+			const client = activeClients.find((entry) => entry.id === projectClientId) ?? null;
+			if (!client) {
+				throw new Error('Choose a client for this project.');
+			}
+
+			const input = {
+				name: projectName,
+				clientId: client.id,
+				clientName: client.name,
+				estimatedPaise: projectEstimate.trim() ? parseMoneyToPaise(projectEstimate) : 0,
+				note: projectNote
+			};
+
+			if (editingProject) {
+				await updateProject(vault.id, editingProject, input, user.email ?? '');
+				closeComposer();
+				say('Project updated.');
+				await completeProjectIfCovered(editingProject.id, paidByProject[editingProject.id] ?? 0);
+			} else {
+				await createProject(vault.id, input, user.email ?? '');
+				closeComposer();
+				say(`Project added · estimate ${formatPaise(input.estimatedPaise)}.`);
+			}
+		});
+	}
+
+	/** When payments reach the estimated price, the project completes itself. */
+	async function completeProjectIfCovered(projectId: string, paidPaise: number): Promise<void> {
+		const project = $vaultData.projects.find((entry) => entry.id === projectId);
+		if (!project || project.status !== 'active' || project.estimatedPaise <= 0) {
+			return;
+		}
+
+		if (paidPaise >= project.estimatedPaise) {
+			await runAction(async () => {
+				await setProjectStatus(vault.id, projectId, 'done', user.email ?? '');
+				say(`${project.name} is complete — the estimate is fully received.`);
+			});
+		}
+	}
+
+	function toggleProjectStatus(project: ProjectRecord): void {
+		const completing = project.status !== 'done';
+		void runAction(async () => {
+			await setProjectStatus(vault.id, project.id, completing ? 'done' : 'active', user.email ?? '');
+			say(completing ? `${project.name} marked complete.` : `${project.name} reopened.`);
+		});
+	}
+
+	function removeProject(project: ProjectRecord): void {
+		const linked = $vaultData.payments.filter((payment) => payment.projectId === project.id).length;
+		if (linked > 0) {
+			say(`${project.name} has ${linked} payment${linked === 1 ? '' : 's'} linked to it. Remove those first.`, 'error');
+			return;
+		}
+
+		confirmation = {
+			title: `Delete ${project.name}?`,
+			message: `The project and its ${formatPaise(project.estimatedPaise)} estimate go away. Its payments and expenses are kept.`,
+			confirmLabel: 'Delete project',
+			run: () => deleteProject(vault.id, project.id, user.email ?? '')
+		};
+	}
+
+	function toggleExpenseTag(tag: string): void {
+		if (expenseTags.includes(tag)) {
+			expenseTags = expenseTags.filter((entry) => entry !== tag);
+		} else if (expenseTags.length >= MAX_EXPENSE_TAGS) {
+			say(`Choose at most ${MAX_EXPENSE_TAGS} tags.`, 'error');
+		} else {
+			expenseTags = [...expenseTags, tag];
+		}
+	}
+
+	function addCommonTag(event: SubmitEvent): void {
+		event.preventDefault();
+		const tag = tagDraft.trim().replace(/\s+/g, ' ').slice(0, 40);
+		if (!tag) {
+			return;
+		}
+
+		if (vault.tags.some((entry) => entry.toLowerCase() === tag.toLowerCase())) {
+			say('That tag is already on the list.', 'error');
+			return;
+		}
+
+		if (vault.tags.length >= MAX_VAULT_TAGS) {
+			say(`Keep the list to ${MAX_VAULT_TAGS} tags.`, 'error');
+			return;
+		}
+
+		void runAction(async () => {
+			await updateVaultTags(vault.id, [...vault.tags, tag], user.email ?? '');
+			tagDraft = '';
+			say(`“${tag}” added to spending tags.`);
+		});
+	}
+
+	function removeCommonTag(tag: string): void {
+		if (vault.tags.length <= 1) {
+			say('Keep at least one tag.', 'error');
+			return;
+		}
+
+		void runAction(async () => {
+			await updateVaultTags(
+				vault.id,
+				vault.tags.filter((entry) => entry !== tag),
+				user.email ?? ''
+			);
+			say(`“${tag}” removed. Past expenses keep it.`);
+		});
 	}
 
 	async function confirmAction(): Promise<void> {
@@ -387,6 +577,14 @@
 
 	function mutationIcon(mutation: VaultMutation): 'money-in' | 'money-out' {
 		return mutation.recordType === 'payment' ? 'money-in' : 'money-out';
+	}
+
+	function projectProgress(paid: number, estimated: number): number {
+		if (estimated <= 0) {
+			return 0;
+		}
+
+		return Math.min(100, Math.round((paid / estimated) * 100));
 	}
 </script>
 
@@ -434,6 +632,10 @@
 		<button class="tab" class:tab--on={activeTab === 'home'} type="button" aria-current={activeTab === 'home'} onclick={() => switchTab('home')}>
 			<Icon name="home" size={21} />
 			<span class="tab__label">Home</span>
+		</button>
+		<button class="tab" class:tab--on={activeTab === 'projects'} type="button" aria-current={activeTab === 'projects'} onclick={() => switchTab('projects')}>
+			<Icon name="target" size={19} />
+			<span class="tab__label">Projects</span>
 		</button>
 		<button class="tab" class:tab--on={activeTab === 'clients'} type="button" aria-current={activeTab === 'clients'} onclick={() => switchTab('clients')}>
 			<Icon name="clients" size={21} />
@@ -493,6 +695,56 @@
 					<span class="quick__icon" aria-hidden="true"><Icon name="plus" size={19} /></span>
 					New client
 				</button>
+				<button class="quick__btn" type="button" onclick={() => openProjectComposer()}>
+					<span class="quick__icon" aria-hidden="true"><Icon name="target" size={19} /></span>
+					New project
+				</button>
+			</section>
+
+			<section class="section">
+				<div class="section__head">
+					<div class="section__title">
+						<p class="eyebrow">Work in progress</p>
+						<h2 class="h2">Your projects</h2>
+					</div>
+					{#if $vaultData.projects.length}
+						<button class="btn btn--quiet btn--sm" type="button" onclick={() => switchTab('projects')}>See all</button>
+					{/if}
+				</div>
+
+				{#if $vaultData.projects.length}
+					<div class="list">
+						{#each $vaultData.projects.slice(0, 3) as project (project.id)}
+							{@const paid = paidByProject[project.id] ?? 0}
+							{@const covered = project.estimatedPaise > 0 && paid >= project.estimatedPaise}
+							<article class="row row--flat">
+								<span class="row__icon" class:row__icon--in={covered || project.status === 'done'} aria-hidden="true"><Icon name="target" size={19} /></span>
+								<div class="row__body">
+									<p class="row__title">{project.name}</p>
+									<p class="row__meta">{project.clientName}</p>
+									<div class="progress" aria-hidden="true">
+										<span class="progress__fill" style={`width: ${projectProgress(paid, project.estimatedPaise)}%`}></span>
+									</div>
+									<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
+								</div>
+								<div class="row__side">
+									{#if covered || project.status === 'done'}
+										<span class="badge">Complete</span>
+									{:else}
+										<span class="badge badge--soft">Active</span>
+									{/if}
+								</div>
+							</article>
+						{/each}
+					</div>
+				{:else}
+					<div class="empty">
+						<span class="empty__icon" aria-hidden="true"><Icon name="target" size={22} /></span>
+						<h3 class="h3">No projects yet</h3>
+						<p>Add a project with an estimated price. When payments reach it, Vault marks the project complete.</p>
+						<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button>
+					</div>
+				{/if}
 			</section>
 
 			<section class="section">
@@ -646,6 +898,77 @@
 					</div>
 				{/if}
 			</section>
+		{:else if activeTab === 'projects'}
+			<section class="section__head">
+				<div class="section__title">
+					<p class="eyebrow">Projects</p>
+					<h2 class="h1">Projects</h2>
+					<p class="lead">Each project has an estimated price. Payments against it show how close it is to done.</p>
+				</div>
+				<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>
+					<Icon name="plus" size={17} /> Add
+				</button>
+			</section>
+
+			{#if $vaultData.projects.length > 4}
+				<label class="search mt-14">
+					<Icon name="search" size={18} />
+					<input bind:value={query} type="search" placeholder="Search projects" aria-label="Search projects" />
+				</label>
+			{/if}
+
+			{#if filteredProjects.length}
+				<div class="list">
+					{#each filteredProjects as project (project.id)}
+						{@const paid = paidByProject[project.id] ?? 0}
+						{@const covered = project.estimatedPaise > 0 && paid >= project.estimatedPaise}
+						<article class="row">
+							<span class="row__icon" class:row__icon--in={covered || project.status === 'done'} aria-hidden="true"><Icon name="target" size={19} /></span>
+							<div class="row__body">
+								<p class="row__title">{project.name}</p>
+								<p class="row__meta">{project.clientName} · estimated {formatPaise(project.estimatedPaise)}</p>
+								<div class="progress" role="img" aria-label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`}>
+									<span class="progress__fill" style={`width: ${projectProgress(paid, project.estimatedPaise)}%`}></span>
+								</div>
+								<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
+								{#if project.note}<p class="row__note">{project.note}</p>{/if}
+								<p class="tiny">Last edited by {project.updatedBy} · {formatDateTime(project.updatedAt)}</p>
+							</div>
+							<div class="row__side">
+								{#if covered || project.status === 'done'}
+									<span class="badge">Complete</span>
+								{:else}
+									<span class="badge badge--soft">Active</span>
+								{/if}
+								<div class="row__tools">
+									<button class="tool" type="button" onclick={() => openProjectComposer(project)} aria-label={`Edit ${project.name}`}>
+										<Icon name="pencil" size={16} />
+									</button>
+									<button class="tool" type="button" onclick={() => toggleProjectStatus(project)} aria-label={`${project.status === 'done' ? 'Reopen' : 'Mark complete'} ${project.name}`}>
+										<Icon name={project.status === 'done' ? 'refresh' : 'check'} size={16} />
+									</button>
+									<button class="tool tool--danger" type="button" onclick={() => removeProject(project)} aria-label={`Delete ${project.name}`}>
+										<Icon name="trash" size={16} />
+									</button>
+								</div>
+							</div>
+						</article>
+					{/each}
+				</div>
+			{:else if needle}
+				<div class="empty">
+					<span class="empty__icon" aria-hidden="true"><Icon name="search" size={22} /></span>
+					<h3 class="h3">No projects match “{query}”</h3>
+					<button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button>
+				</div>
+			{:else}
+				<div class="empty">
+					<span class="empty__icon" aria-hidden="true"><Icon name="target" size={22} /></span>
+					<h3 class="h3">No projects yet</h3>
+					<p>One client can carry several projects. Give each one an estimated price and track payments against it.</p>
+					<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add your first project</button>
+				</div>
+			{/if}
 		{:else if activeTab === 'payments'}
 			<section class="section__head">
 				<div class="section__title">
@@ -674,7 +997,9 @@
 							<span class="row__icon" aria-hidden="true"><Icon name="money-in" size={19} /></span>
 							<div class="row__body">
 								<p class="row__title">{payment.clientName}</p>
-								<p class="row__meta">{formatRelativeDate(payment.occurredOn)} · received by {partnerName(payment.partner)}</p>
+								<p class="row__meta">
+									{formatRelativeDate(payment.occurredOn)} · received by {partnerName(payment.partner)}{payment.projectName ? ` · ${payment.projectName}` : ''}
+								</p>
 								{#if payment.note}<p class="row__note">{payment.note}</p>{/if}
 							</div>
 							<div class="row__side">
@@ -732,7 +1057,7 @@
 						<article class="row">
 							<span class="row__icon row__icon--out" aria-hidden="true"><Icon name="money-out" size={19} /></span>
 							<div class="row__body">
-								<p class="row__title">{expense.category}</p>
+								<p class="row__title">{expense.tags.join(' · ')}</p>
 								<p class="row__meta">
 									{formatRelativeDate(expense.occurredOn)} · paid by {partnerName(expense.partner)}{expense.clientName ? ` · ${expense.clientName}` : ''}
 								</p>
@@ -741,10 +1066,10 @@
 							<div class="row__side">
 								<span class="row__amount row__amount--out num">−{formatPaise(expense.amountPaise)}</span>
 								<div class="row__tools">
-									<button class="tool" type="button" onclick={() => openExpenseComposer(expense)} aria-label={`Edit ${expense.category} expense`}>
+									<button class="tool" type="button" onclick={() => openExpenseComposer(expense)} aria-label={`Edit ${expense.tags.join(' ')} expense`}>
 										<Icon name="pencil" size={16} />
 									</button>
-									<button class="tool tool--danger" type="button" onclick={() => removeExpense(expense)} aria-label={`Delete ${expense.category} expense`}>
+									<button class="tool tool--danger" type="button" onclick={() => removeExpense(expense)} aria-label={`Delete ${expense.tags.join(' ')} expense`}>
 										<Icon name="trash" size={16} />
 									</button>
 								</div>
@@ -827,6 +1152,28 @@
 							<strong>{vault.members.b.name}{ownPartner === 'b' ? ' (you)' : ''}</strong>
 							<small>{vault.members.b.email}</small>
 						</article>
+						<article class="settings-row">
+							<span>Spending tags</span>
+							<strong>{vault.tags.length} tags</strong>
+							<small>Shown when you add an expense. Add the things you usually spend on — both of you share this list.</small>
+						</article>
+						<div class="tag-block">
+							<div class="chips" aria-label="Common spending tags">
+								{#each vault.tags as tag (tag)}
+									<span class="chip chip--on chip--tag">
+										<Icon name="tag" size={15} /> {tag}
+										<button class="chip__x" type="button" aria-label={`Remove ${tag} tag`} disabled={actionBusy} onclick={() => removeCommonTag(tag)}>
+											<Icon name="close" size={13} />
+										</button>
+									</span>
+								{/each}
+							</div>
+							<form class="tag-add" onsubmit={(event) => addCommonTag(event)}>
+								<input class="input" bind:value={tagDraft} maxlength="40" placeholder="New tag, e.g. Hosting" aria-label="New spending tag" disabled={actionBusy} />
+								<button class="btn btn--outline btn--sm" type="submit" disabled={actionBusy || !tagDraft.trim()}>Add tag</button>
+							</form>
+							<p class="tiny">Tags stay on past expenses even after you remove them from this list.</p>
+						</div>
 						<article class="settings-row settings-row--note">
 							<span>This device</span>
 							<strong>Offline copy is on</strong>
@@ -853,7 +1200,7 @@
 		<header class="sheet__head">
 			<div>
 				<p class="eyebrow">
-					{composer === 'client' ? 'Client' : composer === 'payment' ? 'Money in' : 'Money out'}
+					{composer === 'client' ? 'Client' : composer === 'payment' ? 'Money in' : composer === 'project' ? 'Project' : 'Money out'}
 				</p>
 				<h2 class="h2" id="composer-title">
 					{composer === 'client'
@@ -864,9 +1211,13 @@
 							? editingPayment
 								? 'Edit payment'
 								: 'Record a payment'
-							: editingExpense
-								? 'Edit expense'
-								: 'Add an expense'}
+							: composer === 'project'
+								? editingProject
+									? 'Edit project'
+									: 'New project'
+								: editingExpense
+									? 'Edit expense'
+									: 'Add an expense'}
 				</h2>
 			</div>
 			<button class="icon-btn" type="button" aria-label="Close form" disabled={actionBusy} onclick={closeComposer}>
@@ -922,6 +1273,38 @@
 							</div>
 						</div>
 
+						{#if $vaultData.projects.length}
+							<div class="field">
+								<span class="field__label">Project <em class="field__optional">optional</em></span>
+								<div class="chips" role="radiogroup" aria-label="Project for this payment">
+									<button class="chip" class:chip--on={paymentProjectId === ''} type="button" role="radio" aria-checked={paymentProjectId === ''} disabled={actionBusy} onclick={() => (paymentProjectId = '')}>
+										No project
+									</button>
+									{#each $vaultData.projects as project (project.id)}
+										<button
+											class="chip"
+											class:chip--on={paymentProjectId === project.id}
+											type="button"
+											role="radio"
+											aria-checked={paymentProjectId === project.id}
+											disabled={actionBusy}
+											onclick={() => {
+												paymentProjectId = project.id;
+												paymentClientId = project.clientId;
+											}}
+										>
+											{project.name}
+										</button>
+									{/each}
+								</div>
+								{#if selectedPaymentProject}
+									<p class="hint">
+										Counts toward {selectedPaymentProject.name} · {formatPaise(paidByProject[selectedPaymentProject.id] ?? 0)} of {formatPaise(selectedPaymentProject.estimatedPaise)} received.
+									</p>
+								{/if}
+							</div>
+						{/if}
+
 						<div class="field">
 							<span class="field__label">Received by</span>
 							<div class="chips" role="radiogroup" aria-label="Received by">
@@ -958,6 +1341,55 @@
 						</button>
 					</form>
 				{/if}
+			{:else if composer === 'project'}
+				{#if !activeClients.length}
+					<div class="empty">
+						<span class="empty__icon" aria-hidden="true"><Icon name="clients" size={22} /></span>
+						<h3 class="h3">Add a client first</h3>
+						<p>A project belongs to the client who ordered the work.</p>
+						<button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add a client</button>
+					</div>
+				{:else}
+					<form class="form" onsubmit={(event) => void saveProject(event)}>
+						<label class="field">
+							<span class="field__label">Project name</span>
+							<input class="input" bind:value={projectName} maxlength="120" placeholder="Website build" required disabled={actionBusy} />
+						</label>
+
+						<div class="field">
+							<span class="field__label">Client</span>
+							<div class="chips" role="radiogroup" aria-label="Client for this project">
+								{#each activeClients as client (client.id)}
+									<button class="chip" class:chip--on={projectClientId === client.id} type="button" role="radio" aria-checked={projectClientId === client.id} disabled={actionBusy} onclick={() => (projectClientId = client.id)}>
+										{client.name}
+									</button>
+								{/each}
+							</div>
+						</div>
+
+						<div class="field">
+							<span class="field__label">Estimated price</span>
+							<label class="amount-field">
+								<span class="amount-field__sign" aria-hidden="true">₹</span>
+								<input bind:value={projectEstimate} inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Estimated price in rupees" required disabled={actionBusy} />
+							</label>
+							<p class="hint">When payments for this project reach the estimate, Vault marks it complete.</p>
+						</div>
+
+						<label class="field">
+							<span class="field__label">Note <em class="field__optional">optional</em></span>
+							<textarea class="textarea" bind:value={projectNote} maxlength="1000" rows="3" placeholder="Scope, milestones or what is left" disabled={actionBusy}></textarea>
+						</label>
+
+						{#if editingProject}
+							<p class="tiny">Last edited by {editingProject.updatedBy} · {formatDateTime(editingProject.updatedAt)}</p>
+						{/if}
+
+						<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
+							{actionBusy ? 'Saving…' : editingProject ? 'Save project' : 'Add project'}
+						</button>
+					</form>
+				{/if}
 			{:else}
 				<form class="form" onsubmit={(event) => void saveExpense(event)}>
 					<div class="field">
@@ -970,13 +1402,21 @@
 
 					<div class="field">
 						<span class="field__label">What it was for</span>
-						<div class="chips" role="radiogroup" aria-label="Expense category">
-							{#each categoryOptions as option (option.value)}
-								<button class="chip" class:chip--on={expenseCategory === option.value} type="button" role="radio" aria-checked={expenseCategory === option.value} disabled={actionBusy} onclick={() => (expenseCategory = option.value as (typeof expenseCategories)[number])}>
-									{option.label}
+						<div class="chips" aria-label="Spending tags">
+							{#each tagOptions as tag (tag)}
+								<button
+									class="chip"
+									class:chip--on={expenseTags.includes(tag)}
+									type="button"
+									aria-pressed={expenseTags.includes(tag)}
+									disabled={actionBusy}
+									onclick={() => toggleExpenseTag(tag)}
+								>
+									{tag}
 								</button>
 							{/each}
 						</div>
+						<p class="hint">Pick one or more tags. You can add more in More → Settings.</p>
 					</div>
 
 					<div class="field">

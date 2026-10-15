@@ -22,6 +22,7 @@ import {
 import { resolveAccountEmail } from '$lib/firebase/account';
 import { getFirebaseClient } from '$lib/firebase/client';
 import type { VaultMember, VaultSetupInput, VaultSummary, VaultTotals } from '$lib/types/vault';
+import { defaultSpendingTags } from '$lib/types/vault';
 import { isValidPaise } from '$lib/utils/money';
 
 export interface VaultMembershipResult {
@@ -57,6 +58,19 @@ function toPaise(value: unknown): number {
 	return isValidPaise(value) ? value : 0;
 }
 
+function toTagList(value: unknown): string[] {
+	if (!Array.isArray(value)) {
+		return [...defaultSpendingTags];
+	}
+
+	const tags = value
+		.filter((entry): entry is string => typeof entry === 'string')
+		.map((tag) => tag.trim())
+		.filter(Boolean);
+
+	return tags.length ? tags : [...defaultSpendingTags];
+}
+
 function toVaultTotals(value: unknown): VaultTotals {
 	const totals = value as Partial<VaultTotals> | undefined;
 	const partnerA = totals?.a as Partial<VaultTotals['a']> | undefined;
@@ -88,6 +102,7 @@ function toVaultSummary(snapshot: QueryDocumentSnapshot<DocumentData>): VaultSum
 			b: toVaultMember(members?.b)
 		},
 		totals: toVaultTotals(data.totals),
+		tags: toTagList(data.tags),
 		lastMutationId: typeof data.lastMutationId === 'string' ? data.lastMutationId : null,
 		createdAt: asDate(data.createdAt),
 		updatedAt: asDate(data.updatedAt),
@@ -123,7 +138,7 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 	};
 
 	if (!signedInEmail) {
-		throw new Error('Your Google account did not provide an email address. Please choose another account.');
+		throw new Error('Your account did not provide an email address. Please sign in again.');
 	}
 
 	if (!name) {
@@ -131,11 +146,11 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 	}
 
 	if (!members.a.name || !members.b.name || !members.a.email || !members.b.email) {
-		throw new Error('Enter a name and Google email for both partners.');
+		throw new Error('Enter a name and email for both partners.');
 	}
 
 	if (members.a.email.toLocaleLowerCase() === members.b.email.toLocaleLowerCase()) {
-		throw new Error('Partner A and Partner B must use different Google emails.');
+		throw new Error('Partner A and Partner B must use different emails.');
 	}
 
 	const ownPartner = [members.a, members.b].find(
@@ -143,7 +158,7 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 	);
 
 	if (!ownPartner) {
-		throw new Error('Your signed-in Google email must be entered as Partner A or Partner B.');
+		throw new Error('Your signed-in email must be entered as Partner A or Partner B.');
 	}
 
 	// Google always returns the account email in lower case, and the security
@@ -162,7 +177,8 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 		name,
 		createdAt: serverTimestamp(),
 		members,
-		totals: initialTotals()
+		totals: initialTotals(),
+		tags: [...defaultSpendingTags]
 	});
 
 	return vaultRef.id;

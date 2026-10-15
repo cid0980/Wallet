@@ -1,6 +1,7 @@
 export type PartnerKey = 'a' | 'b';
 
-export const expenseCategories = [
+/** Starter list of spending tags; the vault keeps its own editable copy. */
+export const defaultSpendingTags = [
 	'Advertising',
 	'Contractor',
 	'Equipment',
@@ -10,7 +11,10 @@ export const expenseCategories = [
 	'Other'
 ] as const;
 
-export type ExpenseCategory = (typeof expenseCategories)[number];
+export const MAX_TAG_LENGTH = 40;
+export const MAX_EXPENSE_TAGS = 5;
+export const MAX_VAULT_TAGS = 12;
+
 export type MoneyRecordType = 'payment' | 'expense';
 export type MutationKind =
 	| 'payment-create'
@@ -19,6 +23,8 @@ export type MutationKind =
 	| 'expense-create'
 	| 'expense-update'
 	| 'expense-delete';
+
+export type ProjectStatus = 'active' | 'done';
 
 export interface VaultMember {
 	name: string;
@@ -63,6 +69,8 @@ export interface VaultSummary {
 		b: VaultMember;
 	};
 	totals: VaultTotals;
+	/** Shared spending tags; defaults to `defaultSpendingTags` until edited. */
+	tags: string[];
 	lastMutationId: string | null;
 	createdAt: Date | null;
 	updatedAt: Date | null;
@@ -82,10 +90,26 @@ export interface ClientRecord {
 	updatedBy: string;
 }
 
+export interface ProjectRecord {
+	id: string;
+	name: string;
+	clientId: string;
+	clientName: string;
+	estimatedPaise: number;
+	status: ProjectStatus;
+	note: string;
+	createdAt: Date | null;
+	updatedAt: Date | null;
+	createdBy: string;
+	updatedBy: string;
+}
+
 export interface PaymentRecord {
 	id: string;
 	clientId: string;
 	clientName: string;
+	projectId: string | null;
+	projectName: string | null;
 	amountPaise: number;
 	partner: PartnerKey;
 	occurredOn: string;
@@ -103,7 +127,7 @@ export interface ExpenseRecord {
 	clientName: string | null;
 	amountPaise: number;
 	partner: PartnerKey;
-	category: ExpenseCategory;
+	tags: string[];
 	occurredOn: string;
 	note: string;
 	createdAt: Date | null;
@@ -130,9 +154,19 @@ export interface ClientInput {
 	notes: string;
 }
 
+export interface ProjectInput {
+	name: string;
+	clientId: string;
+	clientName: string;
+	estimatedPaise: number;
+	note: string;
+}
+
 export interface PaymentInput {
 	clientId: string;
 	clientName: string;
+	projectId: string | null;
+	projectName: string | null;
 	amountPaise: number;
 	partner: PartnerKey;
 	occurredOn: string;
@@ -144,13 +178,14 @@ export interface ExpenseInput {
 	clientName: string | null;
 	amountPaise: number;
 	partner: PartnerKey;
-	category: ExpenseCategory;
+	tags: string[];
 	occurredOn: string;
 	note: string;
 }
 
 export interface VaultDataSnapshot {
 	clients: ClientRecord[];
+	projects: ProjectRecord[];
 	payments: PaymentRecord[];
 	expenses: ExpenseRecord[];
 	mutations: VaultMutation[];
