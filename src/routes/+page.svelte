@@ -6,6 +6,7 @@
 	import VaultWorkspace from '$lib/components/app/VaultWorkspace.svelte';
 	import EmailLogin from '$lib/components/auth/EmailLogin.svelte';
 	import VaultSetupForm from '$lib/components/setup/VaultSetupForm.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import {
 		FIRESTORE_RULES_FILE_URL,
 		authSettingsConsoleUrl,
@@ -49,8 +50,8 @@
 
 	/**
 	 * Runs when the vault lookup is refused: reads one document that never
-	 * exists and reports the token claims, so one screenshot says whether the
-	 * rules, the claims, or a stale cached bundle is at fault.
+	 * exists and reports what the account looks like, so a single screenshot
+	 * says whether the rules, the claims, or a stale cached bundle is at fault.
 	 */
 	async function runAccessCheck(): Promise<void> {
 		if (!browser || accessCheckRunning) {
@@ -69,19 +70,14 @@
 			]);
 
 			const claims = formatInspection(inspection);
-			const verified =
-				inspection.emailVerified === true
-					? 'token email_verified: true ✓'
-					: `token email_verified: ${inspection.emailVerified} ✗ (the published rules require true)`;
-			const provider =
-				inspection.signInProvider === 'google.com'
-					? 'token sign_in_provider: google.com ✓'
-					: `token sign_in_provider: ${inspection.signInProvider ?? 'missing'} ✗ (the published rules require google.com)`;
 
 			accessCheckSummary = probe.readAllowed
-				? 'Read test: allowed ✓ — the rules accept this account.'
-				: `Read test: ${probe.code} ✗ — ${probe.detail}`;
-			accessCheckDetail = [claims, verified, provider].join('\n');
+				? 'Test read: allowed ✓ — the rules accept this account, so only the vault document is missing.'
+				: `Test read: ${probe.code} ✗ — ${probe.detail}`;
+			accessCheckDetail = [
+				claims,
+				`token sign_in_provider: ${inspection.signInProvider ?? 'missing'}`
+			].join('\n');
 		} catch (error) {
 			accessCheckSummary = `Access check failed: ${error instanceof Error ? error.message : 'unknown error'}`;
 		} finally {
@@ -96,8 +92,8 @@
 
 	/**
 	 * Publishing the rule set is the one step that must happen in the Firebase
-	 * console. Hand the user the two links that make it a 30-second job instead
-	 * of a copy-paste hunt.
+	 * console. Hand the user the link that makes it a 30-second job instead of
+	 * a copy-paste hunt.
 	 */
 	async function copyRulesFile(): Promise<void> {
 		try {
@@ -134,7 +130,7 @@
 		clearVaultSession();
 	}
 
-	$: currentVaultId = $vaultSession.status === 'ready' ? $vaultSession.vault?.id ?? null : null;
+	$: currentVaultId = $vaultSession.status === 'ready' ? ($vaultSession.vault?.id ?? null) : null;
 
 	$: if (currentVaultId && observedVaultId !== currentVaultId) {
 		observedVaultId = currentVaultId;
@@ -237,41 +233,39 @@
 		name="description"
 		content="A private shared tracker for client payments, spending, and project balances."
 	/>
-	<meta name="theme-color" content="#08743b" />
+	<meta name="theme-color" content="#0b7a44" />
 </svelte:head>
 
 {#if $authState.status === 'signed-in' && $authState.user && currentEmail && $vaultSession.status === 'ready' && $vaultSession.vault && $vaultData.status === 'ready'}
-	<svelte:boundary
-		onerror={(error) => console.info('[vault:workspace] render failed', error)}
-	>
+	<svelte:boundary onerror={(error) => console.info('[vault:workspace] render failed', error)}>
 		{#snippet failed(error)}
-			<main class="gate">
-				<section aria-labelledby="crash-title" class="error-card">
-					<p class="eyebrow">VAULT SCREEN</p>
-					<h1 id="crash-title">This screen could not be drawn.</h1>
-					<p>
+			<div class="page">
+				<section class="card card--pad narrow" aria-labelledby="crash-title">
+					<p class="eyebrow">Vault screen</p>
+					<h1 class="h1 mt-10" id="crash-title">This screen could not be drawn.</h1>
+					<p class="lead mt-10">
 						{error instanceof Error ? error.message : 'The Vault screen hit an unexpected problem.'}
 					</p>
-					<div class="actions">
-						<button class="primary" type="button" onclick={() => window.location.reload()}>
-							Reload Vault
+					<div class="grid-2 mt-14">
+						<button class="btn btn--primary" type="button" onclick={() => window.location.reload()}>
+							<Icon name="refresh" size={17} /> Reload
 						</button>
-						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+						<button class="btn btn--outline" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
 							Sign out
 						</button>
 					</div>
 				</section>
-			</main>
+			</div>
 		{/snippet}
 		<VaultWorkspace vault={$vaultSession.vault} user={$authState.user} onSignOut={handleSignOut} />
 	</svelte:boundary>
 {:else}
-	<main class="gate">
+	<div class="page">
 		{#if $authState.status === 'loading'}
-			<section class="loading-card" aria-live="polite">
+			<div class="card card--pad narrow loader" aria-live="polite">
 				<span class="spinner" aria-hidden="true"></span>
-				<p>Checking your secure Vault session…</p>
-			</section>
+				<p class="muted">Checking your secure Vault session…</p>
+			</div>
 		{:else if $authState.status === 'signed-out' || $authState.status === 'signing-in' || $authState.status === 'error'}
 			<EmailLogin
 				busy={$authState.status === 'signing-in'}
@@ -283,10 +277,10 @@
 			/>
 		{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}
 			{#if $vaultSession.status === 'idle' || $vaultSession.status === 'loading'}
-				<section class="loading-card" aria-live="polite">
+				<div class="card card--pad narrow loader" aria-live="polite">
 					<span class="spinner" aria-hidden="true"></span>
-					<p>Finding your shared Vault…</p>
-				</section>
+					<p class="muted">Finding your shared Vault…</p>
+				</div>
 			{:else if $vaultSession.status === 'no-vault'}
 				<VaultSetupForm
 					user={$authState.user}
@@ -296,54 +290,67 @@
 					onSignOut={handleSignOut}
 				/>
 			{:else if $vaultSession.status === 'error'}
-				<section aria-labelledby="access-title" class="error-card">
-					<p class="eyebrow">VAULT ACCESS</p>
-					<h1 id="access-title">We could not open your Vault.</h1>
-					<p>{$vaultSession.error ?? 'Please try again.'}</p>
+				<section class="card card--pad wide" aria-labelledby="access-title">
+					<p class="eyebrow">Vault access</p>
+					<h1 class="h1 mt-10" id="access-title">We could not open your Vault.</h1>
+					<p class="lead mt-10">{$vaultSession.error ?? 'Please try again.'}</p>
 
-					<div class="access-check">
+					<div class="notice mt-14">
 						<p>
-							<strong>Access check:</strong>
+							<strong>Test read:</strong>
 							{accessCheckRunning && !accessCheckSummary
-								? 'running…'
+								? 'checking…'
 								: (accessCheckSummary ?? 'not run yet')}
 						</p>
 						{#if accessCheckDetail}
-							<details>
-								<summary>Token claims sent with every request</summary>
+							<details class="raw">
+								<summary>What the account sent with the request</summary>
 								<pre>{accessCheckDetail}</pre>
 							</details>
 						{/if}
 					</div>
 
-					<div class="actions">
-						<button class="primary" type="button" onclick={retryVaultLookup}>Try again</button>
+					<div class="notice notice--warn mt-14">
+						<p class="notice__title">Most common cause</p>
+						<p class="mt-10">
+							The Firestore rules published in the Firebase console are older than this app. Paste the
+							current <code>firestore.rules</code> from the repository and press Publish, then try again.
+						</p>
+					</div>
+
+					<div class="cluster mt-14">
+						<button class="btn btn--primary" type="button" onclick={retryVaultLookup}>
+							<Icon name="refresh" size={17} /> Try again
+						</button>
 						{#if rulesConsoleUrl}
-							<a class="secondary" href={rulesConsoleUrl} target="_blank" rel="noopener noreferrer">
-								Open Firestore rules
+							<a class="btn btn--outline" href={rulesConsoleUrl} target="_blank" rel="noopener noreferrer">
+								Open Firestore rules <Icon name="external" size={15} />
 							</a>
 						{/if}
-						<button class="secondary" type="button" onclick={() => void copyRulesFile()}>
-							{rulesFileCopied ? 'Link copied ✓' : 'Copy rules file link'}
+						<button class="btn btn--outline" type="button" onclick={() => void copyRulesFile()}>
+							<Icon name={rulesFileCopied ? 'check' : 'copy'} size={16} />
+							{rulesFileCopied ? 'Link copied' : 'Copy rules link'}
 						</button>
-						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+						<button class="btn btn--quiet" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
 							Use another account
 						</button>
 					</div>
 				</section>
 			{:else if $vaultSession.status === 'ready' && $vaultSession.vault && ($vaultData.status === 'loading' || $vaultData.status === 'idle')}
-				<section class="loading-card" aria-live="polite">
+				<div class="card card--pad narrow loader" aria-live="polite">
 					<span class="spinner" aria-hidden="true"></span>
-					<p>Loading your shared records…</p>
-				</section>
+					<p class="muted">Loading your shared records…</p>
+				</div>
 			{:else if $vaultData.status === 'error'}
-				<section aria-labelledby="data-title" class="error-card">
-					<p class="eyebrow">VAULT DATA</p>
-					<h1 id="data-title">We could not load your records.</h1>
-					<p>{$vaultData.error ?? 'Please try again.'}</p>
-					<div class="actions">
-						<button class="primary" type="button" onclick={retryVaultData}>Try again</button>
-						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+				<section class="card card--pad narrow" aria-labelledby="data-title">
+					<p class="eyebrow">Vault records</p>
+					<h1 class="h1 mt-10" id="data-title">We could not load your records.</h1>
+					<p class="lead mt-10">{$vaultData.error ?? 'Please try again.'}</p>
+					<div class="grid-2 mt-14">
+						<button class="btn btn--primary" type="button" onclick={retryVaultData}>
+							<Icon name="refresh" size={17} /> Try again
+						</button>
+						<button class="btn btn--outline" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
 							Sign out
 						</button>
 					</div>
@@ -354,29 +361,31 @@
 		{:else}
 			{@render startupCard()}
 		{/if}
-	</main>
+	</div>
 {/if}
 
 {#snippet startupCard()}
 	<!-- Nothing may render an empty page. Any unexpected combination of auth,
 	     session, and data states lands here with the live state shown, so a
 	     blank screen can never hide a problem again. -->
-	<section aria-labelledby="stuck-title" class="error-card">
-		<p class="eyebrow">VAULT STARTUP</p>
-		<h1 id="stuck-title">Your Vault did not finish starting.</h1>
-		<p>
+	<section class="card card--pad narrow" aria-labelledby="stuck-title">
+		<p class="eyebrow">Vault startup</p>
+		<h1 class="h1 mt-10" id="stuck-title">Your Vault did not finish starting.</h1>
+		<p class="lead mt-10">
 			{startupError ??
 				'Vault could not reach a usable state on this device. Try again, and if it repeats, sign out and back in.'}
 		</p>
-		<dl class="diagnostics">
+		<dl class="diagnostics mt-14">
 			<div><dt>Session</dt><dd>{$vaultSession.status}</dd></div>
 			<div><dt>Records</dt><dd>{$vaultData.status}</dd></div>
-			<div><dt>Account</dt><dd>{currentEmail ?? 'no email shared'}</dd></div>
+			<div><dt>Account</dt><dd>{currentEmail ?? 'no email'}</dd></div>
 			<div><dt>User ID</dt><dd>{$authState.user?.uid ?? 'none'}</dd></div>
 		</dl>
-		<div class="actions">
-			<button class="primary" type="button" onclick={restartVaultStartup}>Try again</button>
-			<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+		<div class="grid-2 mt-14">
+			<button class="btn btn--primary" type="button" onclick={restartVaultStartup}>
+				<Icon name="refresh" size={17} /> Try again
+			</button>
+			<button class="btn btn--outline" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
 				Sign out
 			</button>
 		</div>
@@ -384,232 +393,3 @@
 {/snippet}
 
 <PwaUpdatePrompt />
-
-<style>
-	:global(*) {
-		box-sizing: border-box;
-	}
-
-	:global(html) {
-		--background: #f3f7f4;
-		--surface: #ffffff;
-		--surface-hover: #f7fbf8;
-		--input: #ffffff;
-		--text: #15261b;
-		--muted: #5d6d62;
-		--green: #08743b;
-		--border: #dce8df;
-		--border-strong: #c2d2c6;
-		background: var(--background);
-		font-family:
-			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-	}
-
-	:global(body) {
-		min-width: 320px;
-		margin: 0;
-		background:
-			radial-gradient(circle at 8% 0%, rgb(46 174 101 / 14%), transparent 31rem),
-			radial-gradient(circle at 100% 100%, rgb(16 108 58 / 8%), transparent 28rem),
-			var(--background);
-	}
-
-	.gate {
-		display: grid;
-		min-height: 100dvh;
-		place-items: center;
-		padding: 24px;
-	}
-
-	.loading-card,
-	.error-card {
-		width: min(100%, 31rem);
-		padding: 30px 24px;
-		border: 1px solid var(--border);
-		border-radius: 24px;
-		background: var(--surface);
-		box-shadow: 0 24px 60px rgb(16 54 34 / 13%);
-	}
-
-	.loading-card {
-		display: grid;
-		justify-items: center;
-		gap: 14px;
-		color: var(--muted);
-		text-align: center;
-	}
-
-	.loading-card p {
-		margin: 0;
-	}
-
-	.spinner {
-		width: 30px;
-		height: 30px;
-		border: 3px solid #cfe5d6;
-		border-top-color: var(--green);
-		border-radius: 50%;
-		animation: spin 850ms linear infinite;
-	}
-
-	.eyebrow {
-		margin: 0 0 10px;
-		color: var(--green);
-		font-size: 0.71rem;
-		font-weight: 800;
-		letter-spacing: 0.13em;
-	}
-
-	h1 {
-		margin: 0;
-		color: var(--text);
-		font-size: clamp(1.8rem, 7vw, 2.4rem);
-		line-height: 1.08;
-		letter-spacing: -0.04em;
-	}
-
-	.error-card > p:not(.eyebrow) {
-		margin: 14px 0 22px;
-		color: var(--muted);
-		line-height: 1.55;
-	}
-
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 10px;
-	}
-
-	.access-check {
-		margin: 0 0 18px;
-		padding: 12px;
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		background: var(--surface-hover);
-		color: var(--text);
-		font-size: 0.82rem;
-		line-height: 1.5;
-	}
-
-	.access-check p {
-		margin: 0;
-	}
-
-	.access-check summary {
-		margin-top: 8px;
-		color: var(--muted);
-		cursor: pointer;
-		font-weight: 700;
-	}
-
-	.access-check pre {
-		margin: 8px 0 0;
-		color: var(--text);
-		font-size: 0.72rem;
-		line-height: 1.5;
-		overflow-x: auto;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
-	.diagnostics {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-		gap: 8px;
-		margin: 0 0 18px;
-	}
-
-	.diagnostics div {
-		padding: 9px 11px;
-		border: 1px solid var(--border);
-		border-radius: 11px;
-		background: var(--surface-hover);
-	}
-
-	.diagnostics dt {
-		color: var(--muted);
-		font-size: 0.68rem;
-		font-weight: 720;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-	}
-
-	.diagnostics dd {
-		margin: 3px 0 0;
-		color: var(--text);
-		font-size: 0.82rem;
-		font-weight: 700;
-		overflow-wrap: anywhere;
-	}
-
-	.primary,
-	.secondary {
-		display: inline-flex;
-		min-height: 46px;
-		align-items: center;
-		border-radius: 12px;
-		font: inherit;
-		font-weight: 780;
-		cursor: pointer;
-	}
-
-	a.secondary {
-		text-decoration: none;
-	}
-
-	.primary {
-		border: 0;
-		padding: 0 18px;
-		background: linear-gradient(135deg, #118044, #086332);
-		color: #fff;
-	}
-
-	.secondary {
-		border: 1px solid var(--border-strong);
-		padding: 0 18px;
-		background: var(--surface);
-		color: var(--text);
-	}
-
-	.primary:focus-visible,
-	.secondary:focus-visible {
-		outline: 3px solid rgb(31 158 88 / 36%);
-		outline-offset: 3px;
-	}
-
-	.primary:disabled,
-	.secondary:disabled {
-		cursor: wait;
-		opacity: 0.65;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	@media (prefers-color-scheme: dark) {
-		:global(html) {
-			--background: #0c1510;
-			--surface: #142219;
-			--surface-hover: #1a2c20;
-			--input: #102017;
-			--text: #eef8f0;
-			--muted: #b9cdbd;
-			--green: #64d38e;
-			--border: #294936;
-			--border-strong: #40664c;
-		}
-
-		.loading-card,
-		.error-card {
-			box-shadow: 0 24px 60px rgb(0 0 0 / 32%);
-		}
-
-		.spinner {
-			border-color: #294936;
-			border-top-color: #64d38e;
-		}
-	}
-</style>
