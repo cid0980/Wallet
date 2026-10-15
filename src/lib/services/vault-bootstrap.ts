@@ -218,7 +218,7 @@ export function vaultErrorMessage(error: unknown): string {
 
 	switch (code) {
 		case 'permission-denied':
-			return 'Vault access was denied. Deploy the current Firestore rules before testing setup.';
+			return 'Firestore refused the vault lookup because the published security rules do not match this app. Open Firestore → Rules, paste the current firestore.rules from the repository, and publish it. Sign-in itself is already working.';
 		case 'unavailable':
 			return 'Firestore is unavailable right now. Check your connection and try again.';
 		case 'failed-precondition':

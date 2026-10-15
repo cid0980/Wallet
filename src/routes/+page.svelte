@@ -5,6 +5,10 @@
 	import VaultWorkspace from '$lib/components/app/VaultWorkspace.svelte';
 	import GoogleLogin from '$lib/components/auth/GoogleLogin.svelte';
 	import VaultSetupForm from '$lib/components/setup/VaultSetupForm.svelte';
+	import {
+		FIRESTORE_RULES_FILE_URL,
+		firestoreRulesConsoleUrl
+	} from '$lib/firebase/client';
 	import { createInitialVault, vaultErrorMessage } from '$lib/services/vault-bootstrap';
 	import { authState, signInWithGoogle, signOutOfVault, startAuthObserver, stopAuthObserver } from '$lib/stores/auth';
 	import { clearVaultData, observeVaultData, vaultData } from '$lib/stores/vault-data';
@@ -21,6 +25,24 @@
 	let signingOut = false;
 	let setupError: string | null = null;
 	let startupError: string | null = null;
+	let rulesFileCopied = false;
+
+	const rulesConsoleUrl = firestoreRulesConsoleUrl();
+
+	/**
+	 * Publishing the rule set is the one step that must happen in the Firebase
+	 * console. Hand the user the two links that make it a 30-second job instead
+	 * of a copy-paste hunt.
+	 */
+	async function copyRulesFile(): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(FIRESTORE_RULES_FILE_URL);
+			rulesFileCopied = true;
+			setTimeout(() => (rulesFileCopied = false), 4000);
+		} catch {
+			window.open(FIRESTORE_RULES_FILE_URL, '_blank', 'noopener');
+		}
+	}
 
 	onMount(() => {
 		void startAuthObserver();
@@ -213,6 +235,14 @@
 					<p>{$vaultSession.error ?? 'Please try again.'}</p>
 					<div class="actions">
 						<button class="primary" type="button" onclick={retryVaultLookup}>Try again</button>
+						{#if rulesConsoleUrl}
+							<a class="secondary" href={rulesConsoleUrl} target="_blank" rel="noopener noreferrer">
+								Open Firestore rules
+							</a>
+						{/if}
+						<button class="secondary" type="button" onclick={() => void copyRulesFile()}>
+							{rulesFileCopied ? 'Link copied ✓' : 'Copy rules file link'}
+						</button>
 						<button class="secondary" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
 							Use another account
 						</button>
@@ -399,11 +429,17 @@
 
 	.primary,
 	.secondary {
+		display: inline-flex;
 		min-height: 46px;
+		align-items: center;
 		border-radius: 12px;
 		font: inherit;
 		font-weight: 780;
 		cursor: pointer;
+	}
+
+	a.secondary {
+		text-decoration: none;
 	}
 
 	.primary {

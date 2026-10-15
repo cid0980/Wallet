@@ -53,6 +53,30 @@ function requiredEnv(key: FirebaseEnvKey): string {
 	return value;
 }
 
+/**
+ * The configured project id, or null when the app is running without Firebase
+ * configuration (for example inside the render harness).
+ */
+export function firebaseProjectId(): string | null {
+	try {
+		return requiredEnv('VITE_FIREBASE_PROJECT_ID');
+	} catch {
+		return null;
+	}
+}
+
+/** Deep link straight to this project's Firestore rules editor. */
+export function firestoreRulesConsoleUrl(): string | null {
+	const projectId = firebaseProjectId();
+	return projectId
+		? `https://console.firebase.google.com/project/${projectId}/firestore/rules`
+		: null;
+}
+
+/** The published rule set this app is built for. */
+export const FIRESTORE_RULES_FILE_URL =
+	'https://raw.githubusercontent.com/cid0980/Wallet/main/firestore.rules';
+
 function firebaseOptions(): FirebaseOptions {
 	const projectId = requiredEnv('VITE_FIREBASE_PROJECT_ID');
 

@@ -182,3 +182,23 @@ test('finds the email from provider data and reports what each source returned',
 	assert.match(brokenInspection.tokenError ?? '', /network-request-failed/);
 	assert.match(formatInspection(brokenInspection), /token lookup: auth\/network-request-failed/);
 });
+
+test('rules-denied guidance points at the console and the published file', async () => {
+	const rules = await import('node:fs').then((fs) =>
+		fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8')
+	);
+
+	// The app reads vaults with two member queries; the published rule set must
+	// allow exactly that shape for a member.
+	assert.match(rules, /match \/vaults\/\{vaultId\} \{/);
+	assert.match(rules, /allow get, list: if isVaultMemberData\(resource\.data\);/);
+	assert.match(rules, /match \/vaults\/\{vaultId\}\/clients\/\{clientId\} \{/);
+
+	// This must be the full policy, not the Step 1 bootstrap policy whose
+	// catch-all denies every client, payment, expense, and history read.
+	assert.doesNotMatch(rules, /narrow bootstrap policy/);
+	assert.match(rules, /allow create: if isVaultMember\(vaultId\)\s*&& isValidClient\(request\.resource\.data\)/);
+
+	const lineCount = rules.trim().split('\n').length;
+	assert.ok(lineCount > 400, `expected the full rule set, saw ${lineCount} lines`);
+});
