@@ -205,7 +205,7 @@ const scenarios: Scenario[] = [
 			...busyData,
 			projects: busyData.projects.map((project) => (project.id === 'project-1' ? { ...project, estimatedPaise: 1500000 } : project))
 		},
-		expect: 'Complete'
+		expect: 'Fully paid'
 	},
 	{
 		name: 'expenses show spending tags',
@@ -246,7 +246,8 @@ const scenarios: Scenario[] = [
 		data: readyData,
 		expect: 'did not finish starting'
 	},
-	{ name: 'error state with message', auth: { status: 'error', user: null, email: null, error: 'auth/unauthorized-domain' }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'auth/unauthorized-domain' }
+	{ name: 'error state with message', auth: { status: 'error', user: null, email: null, error: 'auth/unauthorized-domain' }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'auth/unauthorized-domain' },
+	{ name: 'unverified account is held at the verification gate', auth: { status: 'needs-verification', user, email: user.email, error: null, notice: 'Link sent' }, session: { status: 'idle' }, data: { status: 'idle' }, expect: 'Verify your email' }
 ];
 
 const failures: string[] = [];

@@ -161,8 +161,8 @@ export async function createInitialVault(input: VaultSetupInput): Promise<string
 		throw new Error('Your signed-in email must be entered as Partner A or Partner B.');
 	}
 
-	// Google always returns the account email in lower case, and the security
-	// rules compare it against request.auth.token.email character for character.
+	// Firebase account emails are commonly returned in lower case, and the
+	// security rules compare request.auth.token.email character for character.
 	// A partner address typed with a capital letter would therefore never match:
 	// that partner would be denied, and their membership query would find no
 	// vault and offer to create a second one. Store both addresses lower-cased,
@@ -251,7 +251,7 @@ export interface AccessProbe {
 /**
  * Reads a document that never exists. A missing document returns normally when
  * the rules allow the read, so the result separates "the published rules (or
- * the Google token claims) deny this account" from "reads work; the vault
+ * the token claims) deny this account" from "reads work; the vault
  * simply does not exist yet".
  */
 export async function probeVaultReadAccess(): Promise<AccessProbe> {

@@ -19,8 +19,8 @@
 	--surface-2: #f7faf8;
 	--surface-3: #eef4f0;
 	--ink: #10211a;
-	--ink-2: #54695f;
-	--ink-3: #84998d;
+	--ink-2: #43584c;
+	--ink-3: #52705f;
 	--line: #e2eae5;
 	--line-2: #cbd8d1;
 
@@ -341,7 +341,7 @@ main:focus {
 }
 
 .btn--sm {
-	min-height: 40px;
+	min-height: 44px;
 	padding: 0 13px;
 	font-size: 0.85rem;
 }
@@ -354,8 +354,8 @@ main:focus {
 
 .icon-btn {
 	display: inline-grid;
-	width: 42px;
-	height: 42px;
+	width: 44px;
+	height: 44px;
 	flex: 0 0 auto;
 	place-items: center;
 	border: 1px solid var(--line-2);
@@ -544,7 +544,7 @@ main:focus {
 .pw-toggle {
 	position: absolute;
 	right: 8px;
-	min-height: 38px;
+	min-height: 44px;
 	border: 0;
 	border-radius: var(--r-sm);
 	padding: 0 11px;
@@ -637,20 +637,54 @@ main:focus {
 
 .tab {
 	display: grid;
-	min-height: 56px;
+	min-width: 0;
+	min-height: 58px;
 	place-items: center;
 	gap: 3px;
 	border: 0;
 	border-radius: var(--r-md);
+	padding: 6px 1px;
 	background: transparent;
 	color: var(--ink-3);
 	cursor: pointer;
 }
 
 .tab__label {
-	font-size: 0.62rem;
-	font-weight: 750;
-	letter-spacing: 0.01em;
+	max-width: 100%;
+	/* Fluid so "Payments"/"Expenses" fit one line at 320px with visible
+	   separation instead of overflowing into their neighbours. */
+	font-size: clamp(0.54rem, 2.35vw, 0.69rem);
+	font-weight: 700;
+	letter-spacing: -0.015em;
+	line-height: 1.15;
+	text-align: center;
+}
+
+@media (max-width: 400px) {
+	.shell {
+		padding-left: 10px;
+		padding-right: 10px;
+	}
+
+	.tabs {
+		gap: 2px;
+		padding: 4px;
+	}
+
+	.row {
+		gap: 10px;
+		padding: 12px;
+	}
+
+	.row__icon {
+		width: 36px;
+		height: 36px;
+		border-radius: 12px;
+	}
+
+	.row__amount {
+		font-size: 0.92rem;
+	}
 }
 
 .tab:hover {
@@ -728,21 +762,18 @@ main:focus {
 }
 
 .row__title {
-	overflow: hidden;
 	color: var(--ink);
 	font-size: 0.93rem;
 	font-weight: 750;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	line-height: 1.35;
+	overflow-wrap: anywhere;
 }
 
 .row__meta {
-	overflow: hidden;
 	color: var(--ink-2);
 	font-size: 0.78rem;
 	line-height: 1.4;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: anywhere;
 }
 
 .row__note {
@@ -779,7 +810,11 @@ main:focus {
 }
 
 .tool {
-	min-height: 34px;
+	display: inline-flex;
+	min-width: 44px;
+	min-height: 44px;
+	align-items: center;
+	justify-content: center;
 	border: 0;
 	border-radius: var(--r-sm);
 	padding: 0 10px;
@@ -853,7 +888,7 @@ main:focus {
 }
 
 .hero__label {
-	color: rgb(255 255 255 / 80%);
+	color: rgb(255 255 255 / 94%);
 	font-size: 0.78rem;
 	font-weight: 750;
 	letter-spacing: 0.08em;
@@ -869,7 +904,7 @@ main:focus {
 }
 
 .hero__note {
-	color: rgb(255 255 255 / 78%);
+	color: rgb(255 255 255 / 92%);
 	font-size: 0.82rem;
 }
 
@@ -907,7 +942,7 @@ main:focus {
 	display: flex;
 	align-items: center;
 	gap: 7px;
-	color: rgb(255 255 255 / 76%);
+	color: rgb(255 255 255 / 90%);
 	font-size: 0.74rem;
 	font-weight: 700;
 	letter-spacing: 0.04em;
@@ -1824,8 +1859,8 @@ code {
 
 .chip__x {
 	display: grid;
-	width: 24px;
-	height: 24px;
+	width: 32px;
+	height: 32px;
 	place-items: center;
 	border: 0;
 	border-radius: 50%;

@@ -5,7 +5,7 @@
 export function describeAccessProbe(code: string): string {
 	switch (code) {
 		case 'permission-denied':
-			return 'Rules deny this account at /vaults. Either the published rules are still the locked or bootstrap set, or the token claims they test (email, email_verified, sign_in_provider) do not match. See the claims below.';
+			return 'Rules deny this account at /vaults. Either the published rules are still the locked or bootstrap set, or the token does not carry a verified email that matches the vault member list. See the claims below.';
 		case 'unavailable':
 			return 'Firestore could not be reached from this device. Check the connection and try again.';
 		case 'failed-precondition':

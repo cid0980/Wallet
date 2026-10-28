@@ -20,12 +20,17 @@
 		vaultErrorMessage
 	} from '$lib/services/vault-bootstrap';
 	import {
+		PendingWritesTimeoutError,
 		authState,
+		checkEmailVerified,
 		createAccountWithEmail,
+		resendVerificationEmail,
+		sendVaultPasswordReset,
 		signInWithEmail,
 		signOutOfVault,
 		startAuthObserver,
-		stopAuthObserver
+		stopAuthObserver,
+		type SignOutMode
 	} from '$lib/stores/auth';
 	import { clearVaultData, observeVaultData, vaultData } from '$lib/stores/vault-data';
 	import {
@@ -185,19 +190,51 @@
 		}
 	}
 
-	async function handleSignOut(): Promise<void> {
+	/**
+	 * Returns a user-readable failure message, or null on success. The
+	 * workspace shows it as a toast; the setup form shows `setupError`.
+	 * Unsent offline changes veto the clear-local-data path: the user stays
+	 * signed in and is told exactly how to finish safely.
+	 */
+	async function handleSignOut(mode: SignOutMode = 'keep'): Promise<string | null> {
 		signingOut = true;
 		setupError = null;
 
 		try {
-			await signOutOfVault();
+			await signOutOfVault(mode);
 			observedVaultId = null;
 			clearVaultData();
 			clearVaultSession();
+			return null;
 		} catch (error) {
-			setupError = error instanceof Error ? error.message : 'Could not sign out. Please try again.';
+			const message =
+				error instanceof PendingWritesTimeoutError || error instanceof Error
+					? error.message
+					: 'Could not sign out. Please try again.';
+			setupError = message;
+			return message;
 		} finally {
 			signingOut = false;
+		}
+	}
+
+	let verificationBusy = false;
+
+	async function handleCheckVerified(): Promise<void> {
+		verificationBusy = true;
+		try {
+			await checkEmailVerified();
+		} finally {
+			verificationBusy = false;
+		}
+	}
+
+	async function handleResendVerification(): Promise<void> {
+		verificationBusy = true;
+		try {
+			await resendVerificationEmail();
+		} finally {
+			verificationBusy = false;
 		}
 	}
 
@@ -271,11 +308,46 @@
 			<EmailLogin
 				busy={$authState.status === 'signing-in'}
 				error={$authState.error}
+				notice={$authState.notice}
 				diagnostic={$authState.diagnostic}
 				settingsConsoleUrl={settingsConsoleUrl}
 				onSignIn={signInWithEmail}
 				onCreateAccount={createAccountWithEmail}
+				onResetPassword={sendVaultPasswordReset}
 			/>
+		{:else if $authState.status === 'needs-verification' && $authState.user && currentEmail}
+			<section class="card card--pad narrow" aria-labelledby="verify-title">
+				<p class="eyebrow">One last step</p>
+				<h1 class="h1 mt-10" id="verify-title">Verify your email</h1>
+				<p class="lead mt-10">
+					Your vault opens only for the verified owner of <strong>{currentEmail}</strong>. Open the
+					verification link in that inbox, then come back here.
+				</p>
+
+				{#if $authState.error}
+					<p class="notice notice--error mt-14" role="alert">{$authState.error}</p>
+				{:else if $authState.notice}
+					<p class="notice mt-14" role="status">{$authState.notice}</p>
+				{/if}
+
+				<div class="form mt-14">
+					<button class="btn btn--primary btn--block" type="button" disabled={verificationBusy} onclick={() => void handleCheckVerified()}>
+						<Icon name="check" size={17} /> {verificationBusy ? 'Checking…' : 'I’ve verified'}
+					</button>
+					<button class="btn btn--outline btn--block" type="button" disabled={verificationBusy} onclick={() => void handleResendVerification()}>
+						Resend the link
+					</button>
+				</div>
+
+				<p class="tiny mt-14">
+					No email after a minute? Check spam, then resend — only the newest link works. This step is what
+					stops someone else from claiming your invited address.
+				</p>
+
+				<button class="btn btn--quiet btn--block mt-10" type="button" disabled={signingOut} onclick={() => void handleSignOut()}>
+					Use another account
+				</button>
+			</section>
 		{:else if $authState.status === 'signed-in' && $authState.user && currentEmail}
 			{#if $vaultSession.status === 'idle' || $vaultSession.status === 'loading'}
 				<div class="card card--pad narrow loader" aria-live="polite">
@@ -288,7 +360,7 @@
 					busy={creatingVault || signingOut}
 					error={setupError}
 					onCreate={handleCreateVault}
-					onSignOut={handleSignOut}
+					onSignOut={() => void handleSignOut()}
 				/>
 			{:else if $vaultSession.status === 'error'}
 				<section class="card card--pad wide" aria-labelledby="access-title">

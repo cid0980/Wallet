@@ -42,8 +42,16 @@ export function isValidPaise(value: unknown): value is number {
 	return Number.isSafeInteger(value) && typeof value === 'number' && value >= 0 && value <= MAX_PAISE;
 }
 
+/**
+ * A balance (earned − spent) may legitimately be negative, so signed values
+ * are valid input here even though individual records never are.
+ */
+export function isValidSignedPaise(value: unknown): value is number {
+	return Number.isSafeInteger(value) && typeof value === 'number' && Math.abs(value) <= MAX_PAISE;
+}
+
 export function formatPaise(value: number, options: Intl.NumberFormatOptions = {}): string {
-	const safeValue = isValidPaise(value) ? value : 0;
+	const safeValue = isValidSignedPaise(value) ? value : 0;
 
 	return new Intl.NumberFormat('en-IN', {
 		style: 'currency',
@@ -52,6 +60,15 @@ export function formatPaise(value: number, options: Intl.NumberFormatOptions = {
 		minimumFractionDigits: safeValue % 100 === 0 ? 0 : 2,
 		...options
 	}).format(safeValue / 100);
+}
+
+/**
+ * Formats a balance with its sign always visible. A negative balance must
+ * never render as a positive amount: en-IN currency formatting puts the
+ * minus first (−₹100), and callers should use this for any net figure.
+ */
+export function formatSignedPaise(value: number, options: Intl.NumberFormatOptions = {}): string {
+	return formatPaise(value, { signDisplay: 'negative', ...options });
 }
 
 export function formatPaiseInput(value: number): string {

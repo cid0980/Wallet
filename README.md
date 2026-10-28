@@ -1,21 +1,21 @@
 # Vault
 
-A private shared money tracker for two partners who work on client projects together. Vault is a static, mobile-first PWA with Google sign-in, a two-person Firestore Vault, integer-paise accounting, an audit history, and offline-capable browser caching.
+A private shared money tracker for two partners who work on client projects together. Vault is a static, mobile-first PWA with verified email/password sign-in, a two-person Firestore Vault, integer-paise accounting, an audit history, and offline-capable browser caching.
 
 ## Delivery status
 
 - ✅ Step 1 — static SvelteKit SPA, Vercel static-host configuration, Firebase Emulator configuration
-- ✅ Step 2 — Google redirect sign-in, persistent Firestore cache, member discovery, first-run Vault creation
+- ✅ Step 2 — verified email/password sign-in, persistent Firestore cache, member discovery, first-run Vault creation
 - ✅ Step 3 — integer-paise money utilities, typed documents, atomic payment/expense batches and aggregate increments
-- ✅ Step 4 — dashboard, clients, payments, expenses, immutable history, settings, and mobile navigation
+- ✅ Step 4 — dashboard, clients, projects, payments, expenses, immutable history, settings, CSV export, and mobile navigation
 - ✅ Step 5 — full Firestore rules plus emulator-backed rule tests
 - ✅ Step 6 — installable PWA manifest, service worker, offline app shell, and update prompt
 - ✅ Step 7 — GitHub Actions verification and Vercel prebuilt-production deployment workflow
-- ⏳ Production activation — requires the account owner to configure Vercel secrets/environment values and authorize the final Vercel domain in Firebase Auth
+- ⏳ Production activation — requires the account owner to configure Vercel secrets/environment values, deploy the web app, verify both member accounts, and publish the current Firestore rules
 
 ## Technology baseline
 
-- Node.js `24.12.0` or newer within Node 24
+- Node.js `24.12.0` or newer within Node 24, with npm `10` or newer (the lockfile is validated with both npm 10 and the npm bundled with Node 24)
 - SvelteKit `2.70.3`, Svelte 5, TypeScript, and `@sveltejs/adapter-static`
 - Firebase JS SDK `13.0.0`: Authentication and Cloud Firestore only
 - `@vite-pwa/sveltekit` for the PWA app shell and update prompt
@@ -52,11 +52,14 @@ Before any commit or deployment, run:
 npm run verify
 ```
 
-`npm run verify` performs all three checks:
+`npm run verify` performs the full gate:
 
 1. `npm run check` — Svelte and TypeScript diagnostics
-2. `npm run test:rules` — Firestore Emulator security-rule tests
-3. `npm run build` — static production build plus PWA service-worker generation
+2. `npm run test:unit` — money, project-payment-status, picker, and Firebase configuration tests
+3. `npm run test:render` — server-rendered UI state scenarios, including the email-verification gate
+4. `npm run test:interaction` — picker interaction checks
+5. `npm run test:rules` — Firestore Emulator security-rule tests
+6. `npm run build` — static production build plus PWA service-worker generation
 
 ### Java requirement
 
@@ -70,20 +73,21 @@ starts only local Authentication and Firestore emulators using the non-productio
 
 ## Data model and money safety
 
-All money is stored as a non-negative integer count of **paise**. For example, `₹1,250.50` is stored as `125050`. Vault never uses floating-point arithmetic for balances.
+All stored money records and aggregate totals are non-negative integer counts of **paise**. For example, `₹1,250.50` is stored as `125050`. The derived available balance can be negative when spending exceeds recorded income, and the UI always shows that minus sign. Vault never uses floating-point arithmetic for balances.
 
 ### Firestore hierarchy
 
 ```text
 /vaults/{vaultId}
   /clients/{clientId}
+  /projects/{projectId}
   /payments/{paymentId}
   /expenses/{expenseId}
   /mutations/{mutationId}
 ```
 
 - The root Vault document holds aggregate totals.
-- Payments and expenses are linked to active clients where appropriate.
+- Payments and expenses are linked to active clients where appropriate. A project's payment status (`Unpaid`, `Part paid`, `Fully paid`, or `Overpaid`) is derived from its currently linked payment records; the stored project `status` only records whether the work itself is done, so payment edits and deletions reconcile immediately.
 - Each payment or expense change atomically writes the changed record, an immutable mutation/audit document, and aggregate totals.
 - Security rules use Firestore `getAfter()` and `existsAfter()` checks so a record, its mutation, and the totals cannot be written separately.
 - Clients are archived rather than deleted so historical money records remain meaningful.
@@ -92,15 +96,15 @@ All money is stored as a non-negative integer count of **paise**. For example, `
 
 `firestore.rules` is now the full application rule set. It replaces the earlier bootstrap policy and permits:
 
-- Valid Google-authenticated members to read their own Vault data
-- Both members to create and edit clients
+- Members whose Firebase ID token contains a verified member email (`email_verified == true`) to read their own Vault data
+- Both verified members to create and edit clients
 - Both members to create, edit, and delete payments or expenses only through valid atomic batches
 - Read-only immutable history mutations
 
 It still denies:
 
 - Non-member access
-- Non-Google authentication providers
+- Unverified accounts, even when the account email appears in a vault's member list
 - Direct aggregate-total manipulation
 - Standalone money-record writes
 - Mutation edits/deletes
@@ -113,7 +117,9 @@ Run the included tests with:
 npm run test:rules
 ```
 
-The test suite covers initial Vault creation, member/non-member boundaries, client access, valid payment batches, aggregate manipulation attempts, malformed deltas, payment edits/deletes, and immutable history.
+The test suite covers initial Vault creation, verified/unverified/member/non-member boundaries, constrained member discovery, client and project access, valid payment batches, aggregate manipulation attempts, malformed deltas, payment edits/deletes, spending tags, and immutable history.
+
+> **Migration/deployment order matters.** A GitHub push or Vercel deployment does **not** publish Firestore rules. Deploy the web app first, have both partners sign in and complete email verification, and only then publish this repository's `firestore.rules` in Firebase Console (or run `npm run firestore:rules:deploy` with an authorized Firebase CLI login). Publishing the verified-email rules before existing members verify will temporarily deny their Firestore access until they complete verification in the updated app.
 
 ## PWA and offline behavior
 
@@ -125,7 +131,7 @@ Vault provides:
 - An in-app update prompt
 - Firestore persistent multi-tab IndexedDB cache for Vault data
 
-The service worker deliberately does **not** cache Firestore API responses. Firestore itself manages encrypted browser-local data caching and synchronization. Use Vault only on devices you trust, and sign out on shared devices.
+The service worker deliberately does **not** cache Firestore API responses. Firestore's persistent IndexedDB cache is **not encrypted by Vault**; operating-system/device encryption may still apply, but anyone who can use the same unlocked browser profile may be able to inspect cached records. A normal sign-out intentionally keeps the offline copy for fast/offline reopening. On a shared or untrusted device, use **More → Settings → Sign out and clear local data**. Vault waits for pending writes to sync first; if they cannot sync, it stays signed in rather than deleting the only copy. Clearing can also fail while another Vault tab is open, in which case the sign-in screen explains what to do next.
 
 ## Vercel deployment through GitHub Actions
 
@@ -175,11 +181,11 @@ Complete these in a browser directly in Vercel and GitHub. Do not paste the valu
    ```
 
 6. Run the **Verify and deploy Vault** workflow from GitHub Actions, or push to `main` after the secrets are configured.
-7. Nothing else is needed in Firebase for sign-in: email/password accounts work on any domain without an authorized-domain entry.
+7. After the web deployment is live, both partners should sign in once and verify their email addresses. Then publish the current `firestore.rules` as described below. Email/password sign-in itself does not need an OAuth authorized-domain entry.
 
 ## Firebase Console requirements
 
-- Enable **Authentication → Sign-in method → Email/Password**.
+- Enable **Authentication → Sign-in method → Email/Password**. Vault sends Firebase email-verification and password-reset messages; check **Authentication → Templates** if you want to customize them.
 - Create Firestore in **Production mode** (`asia-south1` is the low-latency region near Hosūr).
-- Publish the current `firestore.rules` from this repository (Firestore Database → Rules).
-- No Google sign-in, no authorized domains, and no email enumeration setting is involved.
+- Deploy the web app first and verify both existing member accounts; then publish the current `firestore.rules` from this repository (Firestore Database → Rules), or run `npm run firestore:rules:deploy` with an authorized Firebase CLI login.
+- The app uses email/password only. Google sign-in and OAuth authorized domains are not used. Password-reset responses are intentionally generic in the UI so the form does not disclose whether an address has an account.

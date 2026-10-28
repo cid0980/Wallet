@@ -1,12 +1,11 @@
 /**
- * A signed-in Google account normally always carries an email address, and
- * Vault needs it twice over: it selects the shared vault and it is the value
- * the Firestore rules compare against `request.auth.token.email`.
+ * A signed-in account normally carries an email address, and Vault needs it
+ * twice over: it selects the shared vault and it is the value the Firestore
+ * rules compare against `request.auth.token.email`.
  *
- * Some accounts do not share one: restricted work, school, or admin-managed
- * Google accounts can return an ID token without an email claim. Firebase then
- * creates a user record whose identifier column is empty, the app has nothing
- * to look a vault up with, and every screen downstream stalls.
+ * Some legacy or provider-managed records do not share one, or mint an ID
+ * token without an email claim. The app then has nothing to look a vault up
+ * with, and every screen downstream stalls.
  *
  * These helpers resolve the email from the token as well as from the user
  * record, so the two can never disagree.
@@ -35,13 +34,14 @@ export interface AccountInspection {
 	providerEmail: string | null;
 	claimsEmail: string | null;
 	claimKeys: string[];
-	/** The claims the Firestore rules test directly. */
+	/** The verification claim the Firestore rules test directly. */
 	emailVerified: boolean | 'missing' | 'not-boolean';
+	/** Diagnostic only; the rules do not restrict the sign-in provider. */
 	signInProvider: string | null;
 	tokenError: string | null;
 }
 
-/** The email claim carried by the ID token, lower-cased by Google. */
+/** The email claim carried by the ID token. */
 export function emailFromClaims(claims: Record<string, unknown> | undefined): string | null {
 	const value = claims?.email;
 	return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -144,8 +144,8 @@ export async function inspectAccount(
 		providerEmail: emailFromProviderData(user),
 		claimsEmail: emailFromClaims(claims),
 		claimKeys: Object.keys(claims ?? {}).sort(),
-		// The published rules require email_verified == true and
-		// firebase.sign_in_provider == 'google.com'. Reporting both turns a
+		// The published rules require email_verified == true. The provider is
+		// reported only as diagnostic context; reporting both turns a
 		// permission-denied from the rules into a readable answer.
 		emailVerified:
 			verified === undefined ? 'missing' : typeof verified === 'boolean' ? verified : 'not-boolean',

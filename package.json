@@ -12,7 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test:unit": "node --test tests/firebase-config.test.mjs tests/project-picker.test.mjs",
+    "test:unit": "node --test tests/firebase-config.test.mjs tests/project-picker.test.mjs tests/project-payment-status.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project vault-rules-test \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs\"",
     "verify": "npm run check && npm run test:unit && npm run test:render && npm run test:interaction && npm run test:rules && npm run build",
     "emulators": "firebase emulators:start --only auth,firestore --project vault-local",

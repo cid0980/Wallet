@@ -326,14 +326,16 @@ test('an account whose token has no email claim is caught, not sent to the rules
 	assert.equal(refreshes, 0);
 });
 
-test('the published rules accept any signed-in member email, not just Google', async () => {
+test('the published rules require a verified member email from any provider', async () => {
 	const rules = await import('node:fs').then((fs) =>
 		fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8')
 	);
 
-	// Email/password tokens are not "verified" until a link is clicked, and the
-	// provider is 'password', so neither condition may gate access.
-	assert.doesNotMatch(rules, /email_verified == true/);
+	// Membership is an email address, so the token must prove the account owns
+	// that inbox: email_verified is required. The provider itself must stay
+	// unrestricted — Google accounts arrive verified, password accounts verify
+	// by link, and both are legitimate members.
+	assert.match(rules, /email_verified == true/);
 	assert.doesNotMatch(rules, /sign_in_provider == 'google\.com'/);
 
 	// Access is still gated on the vault's member list.

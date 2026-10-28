@@ -5,13 +5,18 @@
  */
 import { writable } from 'svelte/store';
 
-export const authState = writable<unknown>({ status: 'loading', user: null, error: null });
+export const authState = writable<unknown>({ status: 'loading', user: null, error: null, notice: null });
 export const vaultSession = writable<unknown>({ status: 'idle' });
 export const vaultData = writable<unknown>({ status: 'idle' });
+
+export class PendingWritesTimeoutError extends Error {}
 
 export function startAuthObserver(): void {}
 export function signInWithEmail(): void {}
 export function createAccountWithEmail(): void {}
+export function resendVerificationEmail(): void {}
+export function checkEmailVerified(): void {}
+export function sendVaultPasswordReset(): void {}
 
 export function signOutOfVault(): void {}
 export function stopAuthObserver(): void {}

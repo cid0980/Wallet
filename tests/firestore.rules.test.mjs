@@ -27,23 +27,22 @@ const eveEmail = 'eve@example.com';
 
 let testEnvironment;
 
-// Members now sign in with email/password, whose tokens are not "verified"
-// until a link is clicked and whose provider is 'password'.
-function memberDb(email) {
+// Members sign in with email/password and must verify the address before
+// the rules accept them: the member list names an email, and verification
+// is what proves the account owns that inbox. A verified token is the only
+// shape treated as a member anywhere in these tests.
+function memberDb(email, { verified = true } = {}) {
 	return testEnvironment.authenticatedContext(`uid-${email}`, {
 		email,
-		email_verified: false,
+		email_verified: verified,
 		firebase: { sign_in_provider: 'password' }
 	}).firestore();
 }
 
-// The same account shape, used to prove a non-member is still refused.
+// The same verified account shape, used to prove a non-member is refused
+// for membership reasons rather than verification ones.
 function nonMemberDb(email) {
-	return testEnvironment.authenticatedContext(`uid-${email}`, {
-		email,
-		email_verified: false,
-		firebase: { sign_in_provider: 'password' }
-	}).firestore();
+	return memberDb(email);
 }
 
 function zeroTotals() {
@@ -213,9 +212,14 @@ test('allows an initial vault only for an account listed as a member', async () 
 		totals: zeroTotals()
 	};
 
-	// An email/password account that is listed as a member may create the vault,
-	// even though its token is not "verified".
+	// A verified email/password account that is listed as a member may create
+	// the vault.
 	await assertSucceeds(setDoc(doc(aliceDb, 'vaults', 'new-vault'), initial));
+
+	// The same member email on an unverified account may not: knowing an
+	// invited address is not proof of owning it.
+	const unverifiedAlice = memberDb(aliceEmail, { verified: false });
+	await assertFails(setDoc(doc(unverifiedAlice, 'vaults', 'unverified-vault'), initial));
 
 	// An account that is not in the member list may not.
 	await assertFails(setDoc(doc(eveDb, 'vaults', 'blocked-vault'), initial));
@@ -235,6 +239,28 @@ test('allows an initial vault only for an account listed as a member', async () 
 		.authenticatedContext('uid-no-email', { email: null, firebase: { sign_in_provider: 'password' } })
 		.firestore();
 	await assertFails(setDoc(doc(noEmail, 'vaults', 'no-email-vault'), initial));
+});
+
+test('denies an unverified account even when its email is a vault member', async () => {
+	// Regression: an attacker who learns an invited partner email could
+	// register a password account for it. Without email_verified the vault,
+	// its subcollections and member-discovery queries must all stay shut.
+	const unverifiedBob = memberDb(bobEmail, { verified: false });
+	await assertFails(getDoc(doc(unverifiedBob, 'vaults', vaultId)));
+	await assertFails(getDoc(doc(unverifiedBob, 'vaults', vaultId, 'clients', 'client-acme')));
+	await assertFails(
+		getDocs(query(collection(unverifiedBob, 'vaults'), where('members.b.email', '==', bobEmail)))
+	);
+	await assertFails(
+		setDoc(doc(unverifiedBob, 'vaults', vaultId, 'clients', 'new-client'), {
+			...seededClient(),
+			createdBy: bobEmail,
+			updatedBy: bobEmail
+		})
+	);
+
+	// The verified owner of the same address is unaffected.
+	await assertSucceeds(getDoc(doc(memberDb(bobEmail), 'vaults', vaultId)));
 });
 
 test('allows members and denies non-members when reading vault data', async () => {

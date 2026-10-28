@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Vault is a two-person, Google-authenticated ledger. Money records are
+    // Vault is a two-person, verified-email-authenticated ledger. Money records are
     // changed only as a three-document atomic batch:
     //   1. payment or expense record
     //   2. immutable mutation/audit record
@@ -10,14 +10,18 @@ service cloud.firestore {
     // getAfter()/existsAfter() make the three writes inseparable.
 
     // Vault is private to the two members named in its member list. Membership
-    // is what grants access: any signed-in account whose token carries an email
-    // is considered, and isVaultMemberData() then requires that email to be in
-    // the vault's member list. This works for email/password and Google
-    // accounts alike, and does not depend on an email_verified claim.
+    // is what grants access, but the member email alone is not proof of
+    // identity: anyone who learns an invited address could register a password
+    // account for it before its owner does. The token must therefore also
+    // carry email_verified == true, which Firebase only sets after the account
+    // owner clicks the verification link sent to that inbox (Google accounts
+    // arrive verified). isVaultMemberData() then requires that verified email
+    // to be in the vault's member list.
     function signedInWithEmail() {
       return request.auth != null
         && request.auth.token.email is string
-        && request.auth.token.email.size() > 0;
+        && request.auth.token.email.size() > 0
+        && request.auth.token.email_verified == true;
     }
 
     function authEmail() {

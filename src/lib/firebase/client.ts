@@ -13,10 +13,13 @@ import {
 	type Auth
 } from 'firebase/auth';
 import {
+	clearIndexedDbPersistence,
 	getFirestore,
 	initializeFirestore,
 	persistentLocalCache,
 	persistentMultipleTabManager,
+	terminate,
+	waitForPendingWrites,
 	type Firestore
 } from 'firebase/firestore';
 
@@ -150,4 +153,47 @@ export function getFirebaseClient(): FirebaseClient {
 	};
 
 	return firebaseClient;
+}
+
+/** Raised when unsent offline writes did not reach the server in time. */
+export class PendingWritesTimeoutError extends Error {
+	constructor() {
+		super('Some changes have not synced yet, so local data was kept. Reconnect, wait for “Synced”, then try again.');
+		this.name = 'PendingWritesTimeoutError';
+	}
+}
+
+/**
+ * Waits for queued writes to be acknowledged, but never forever: offline,
+ * `waitForPendingWrites` simply never resolves, and the caller must not
+ * erase the only copy of unsent records.
+ */
+export async function waitForPendingWritesWithTimeout(db: Firestore, timeoutMs = 8000): Promise<void> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	try {
+		await Promise.race([
+			waitForPendingWrites(db),
+			new Promise<never>((_resolve, reject) => {
+				timer = setTimeout(() => reject(new PendingWritesTimeoutError()), timeoutMs);
+			})
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/**
+ * Removes this browser's Firestore cache: terminate the running instance,
+ * then clear its IndexedDB persistence (the only order Firebase allows).
+ *
+ * The cache is *not* encrypted by Vault, so this is the privacy-critical
+ * path for shared devices. It can fail with `failed-precondition` while
+ * another tab still holds the multi-tab cache open; callers should say so.
+ * After termination the instance is unusable, so callers reload the page.
+ */
+export async function terminateAndClearFirestoreCache(db: Firestore): Promise<void> {
+	await terminate(db);
+	await clearIndexedDbPersistence(db);
+	firebaseClient = undefined;
 }

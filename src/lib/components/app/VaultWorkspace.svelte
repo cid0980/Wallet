@@ -42,7 +42,12 @@
 		todayDateKey,
 		yesterdayDateKey
 	} from '$lib/utils/dates';
-	import { formatPaise, formatPaiseInput, netPaise, parseMoneyToPaise } from '$lib/utils/money';
+	import { formatPaise, formatPaiseInput, formatSignedPaise, netPaise, parseMoneyToPaise } from '$lib/utils/money';
+	import {
+		paidByProject as sumPaidByProject,
+		paymentStateLabel,
+		projectPaymentStatus
+	} from '$lib/utils/project-payment-status';
 	import { projectIdForClient, projectsForClient } from '$lib/utils/project-picker';
 
 	type MainTab = 'home' | 'clients' | 'projects' | 'payments' | 'expenses' | 'more';
@@ -56,7 +61,8 @@
 
 	export let vault: VaultSummary;
 	export let user: User;
-	export let onSignOut: () => Promise<void> | void;
+	/** Resolves to a failure message to show, or null when sign-out succeeded. */
+	export let onSignOut: (mode?: 'keep' | 'clear') => Promise<string | null>;
 
 	let activeTab: MainTab = 'home';
 	let morePanel: MorePanel = 'history';
@@ -100,6 +106,12 @@
 	let paymentProjectId = '';
 	let tagDraft = '';
 
+	// Client pickers become searchable once the chip list grows long.
+	let paymentClientQuery = '';
+	let expenseClientQuery = '';
+	let projectClientQuery = '';
+	let signingOutNow = false;
+
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 	$: activeClients = $vaultData.clients.filter((client) => !client.isArchived);
@@ -139,15 +151,10 @@
 	$: paymentClientProjects = projectsForClient($vaultData.projects, paymentClientId);
 	$: selectedPaymentProject = paymentClientProjects.find((project) => project.id === paymentProjectId) ?? null;
 
-	$: paidByProject = (() => {
-		const paid: Record<string, number> = {};
-		for (const payment of $vaultData.payments) {
-			if (payment.projectId) {
-				paid[payment.projectId] = (paid[payment.projectId] ?? 0) + payment.amountPaise;
-			}
-		}
-		return paid;
-	})();
+	// Payment coverage is always derived from the current records — never a
+	// stored flag — so edits, deletions and a partner's concurrent writes are
+	// reflected immediately, and no payment can be counted twice.
+	$: paidByProject = sumPaidByProject($vaultData.payments);
 
 	$: paymentClientOptions = activeClients.map((client) => ({ value: client.id, label: client.name }));
 
@@ -155,6 +162,19 @@
 		{ value: '', label: 'No client' },
 		...activeClients.map((client) => ({ value: client.id, label: client.name }))
 	];
+
+	/** Keeps the current selection visible even when the search would hide it. */
+	function filterClientOptions(options: ChipOption[], rawQuery: string, selectedId: string): ChipOption[] {
+		const term = rawQuery.trim().toLowerCase();
+		if (!term) {
+			return options;
+		}
+		return options.filter((option) => option.value === selectedId || option.label.toLowerCase().includes(term));
+	}
+
+	$: shownPaymentClientOptions = filterClientOptions(paymentClientOptions, paymentClientQuery, paymentClientId);
+	$: shownExpenseClientOptions = filterClientOptions(expenseClientOptions, expenseClientQuery, expenseClientId);
+	$: shownProjectClientOptions = filterClientOptions(paymentClientOptions, projectClientQuery, projectClientId);
 
 	$: needle = query.trim().toLowerCase();
 	$: filteredClients = needle ? shownClients.filter((client) => matches(needle, client.name, client.contact, client.notes)) : shownClients;
@@ -274,6 +294,7 @@
 		paymentDate = payment?.occurredOn ?? todayDateKey();
 		paymentDateMode = dateModeFor(paymentDate);
 		paymentNote = payment?.note ?? '';
+		paymentClientQuery = '';
 		composer = 'payment';
 	}
 
@@ -305,6 +326,7 @@
 		expenseDate = expense?.occurredOn ?? todayDateKey();
 		expenseDateMode = dateModeFor(expenseDate);
 		expenseNote = expense?.note ?? '';
+		expenseClientQuery = '';
 		composer = 'expense';
 	}
 
@@ -323,6 +345,7 @@
 		projectClientId = project?.clientId ?? activeClients[0]?.id ?? '';
 		projectEstimate = project ? formatPaiseInput(project.estimatedPaise) : '';
 		projectNote = project?.note ?? '';
+		projectClientQuery = '';
 		composer = 'project';
 	}
 
@@ -393,13 +416,9 @@
 				say(`${formatPaise(input.amountPaise)} received from ${selectedPaymentClient.name}.`);
 			}
 
-			if (input.projectId) {
-				const paidAfter =
-					$vaultData.payments
-						.filter((payment) => payment.projectId === input.projectId && payment.id !== editingPayment?.id)
-						.reduce((sum, payment) => sum + payment.amountPaise, 0) + input.amountPaise;
-				await completeProjectIfCovered(input.projectId, paidAfter);
-			}
+			// No completion bookkeeping here: "fully paid" is derived from the
+			// payment list itself, so it can never double-count this write or
+			// go stale when a payment is later edited or removed.
 		});
 	}
 
@@ -444,7 +463,7 @@
 	function removePayment(payment: PaymentRecord): void {
 		confirmation = {
 			title: 'Delete this payment?',
-			message: `${formatPaise(payment.amountPaise)} from ${payment.clientName} will be removed from the balance and history.`,
+			message: `${formatPaise(payment.amountPaise)} from ${payment.clientName} will be removed from the balance and this list. The deletion itself stays in your history, so both of you can see what changed.`,
 			confirmLabel: 'Delete payment',
 			run: () => deletePayment(vault, payment, user.email ?? '')
 		};
@@ -453,7 +472,7 @@
 	function removeExpense(expense: ExpenseRecord): void {
 		confirmation = {
 			title: 'Delete this expense?',
-			message: `${formatPaise(expense.amountPaise)} for ${expense.tags.join(' / ')} will be removed from the balance and history.`,
+			message: `${formatPaise(expense.amountPaise)} for ${expense.tags.join(' / ')} will be removed from the balance and this list. The deletion itself stays in your history, so both of you can see what changed.`,
 			confirmLabel: 'Delete expense',
 			run: () => deleteExpense(vault, expense, user.email ?? '')
 		};
@@ -479,7 +498,6 @@
 				await updateProject(vault.id, editingProject, input, user.email ?? '');
 				closeComposer();
 				say('Project updated.');
-				await completeProjectIfCovered(editingProject.id, paidByProject[editingProject.id] ?? 0);
 			} else {
 				await createProject(vault.id, input, user.email ?? '');
 				closeComposer();
@@ -488,19 +506,17 @@
 		});
 	}
 
-	/** When payments reach the estimated price, the project completes itself. */
-	async function completeProjectIfCovered(projectId: string, paidPaise: number): Promise<void> {
-		const project = $vaultData.projects.find((entry) => entry.id === projectId);
-		if (!project || project.status !== 'active' || project.estimatedPaise <= 0) {
-			return;
-		}
-
-		if (paidPaise >= project.estimatedPaise) {
-			await runAction(async () => {
-				await setProjectStatus(vault.id, projectId, 'done', user.email ?? '');
-				say(`${project.name} is complete — the estimate is fully received.`);
-			});
-		}
+	/**
+	 * Work status is manual and separate from payment status: a project can
+	 * be finished work that is not fully paid yet, or fully paid work that is
+	 * still being delivered. Only a person can say the work is done.
+	 */
+	async function toggleProjectWorkStatus(project: ProjectRecord): Promise<void> {
+		const next = project.status === 'done' ? 'active' : 'done';
+		await runAction(async () => {
+			await setProjectStatus(vault.id, project.id, next, user.email ?? '');
+			say(next === 'done' ? `${project.name} marked as work done.` : `${project.name} reopened.`);
+		});
 	}
 
 	function removeProject(project: ProjectRecord): void {
@@ -512,7 +528,7 @@
 
 		confirmation = {
 			title: `Delete ${project.name}?`,
-			message: `The project and its ${formatPaise(project.estimatedPaise)} estimate go away. Its payments and expenses are kept.`,
+			message: `The project and its ${formatPaise(project.estimatedPaise)} estimate go away. It has no payments linked to it, and this cannot be undone.`,
 			confirmLabel: 'Delete project',
 			run: () => deleteProject(vault.id, project.id, user.email ?? '')
 		};
@@ -579,6 +595,72 @@
 			await pending.run();
 			say(`${pending.confirmLabel} done.`);
 		});
+	}
+
+	async function requestSignOut(mode: 'keep' | 'clear'): Promise<void> {
+		signingOutNow = true;
+		try {
+			const problem = await onSignOut(mode);
+			if (problem) {
+				say(problem, 'error');
+			}
+		} finally {
+			signingOutNow = false;
+		}
+	}
+
+	function csvCell(value: string | number): string {
+		const raw = String(value);
+		// Neutralize spreadsheet formulas in user-entered names/notes before
+		// applying ordinary CSV quoting.
+		const text = /^\s*[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+		return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+	}
+
+	function csvAmount(paise: number): string {
+		const digits = String(paise).padStart(3, '0');
+		return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
+	}
+
+	function downloadCsv(filename: string, header: string[], rows: (string | number)[][]): void {
+		const body = [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+		const url = URL.createObjectURL(new Blob([body], { type: 'text/csv;charset=utf-8' }));
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		link.click();
+		URL.revokeObjectURL(url);
+		say('CSV downloaded. It contains your financial records — store it somewhere private.');
+	}
+
+	function exportPaymentsCsv(): void {
+		downloadCsv(
+			`vault-payments-${todayDateKey()}.csv`,
+			['Date', 'Client', 'Project', 'Received by', 'Amount (INR)', 'Note'],
+			filteredPayments.map((payment) => [
+				payment.occurredOn,
+				payment.clientName,
+				payment.projectName ?? '',
+				partnerName(payment.partner),
+				csvAmount(payment.amountPaise),
+				payment.note
+			])
+		);
+	}
+
+	function exportExpensesCsv(): void {
+		downloadCsv(
+			`vault-expenses-${todayDateKey()}.csv`,
+			['Date', 'Tags', 'Client', 'Paid by', 'Amount (INR)', 'Note'],
+			filteredExpenses.map((expense) => [
+				expense.occurredOn,
+				expense.tags.join(' · '),
+				expense.clientName ?? '',
+				partnerName(expense.partner),
+				csvAmount(expense.amountPaise),
+				expense.note
+			])
+		);
 	}
 
 	function mutationAmount(mutation: VaultMutation): { amount: number; direction: 'in' | 'out' } {
@@ -667,9 +749,9 @@
 
 			<section class="hero" class:hero--negative={balance < 0}>
 				<p class="hero__label">Available balance</p>
-				<p class="hero__value num">{formatPaise(Math.abs(balance))}</p>
+				<p class="hero__value num">{formatSignedPaise(balance)}</p>
 				<p class="hero__note">
-					{balance < 0 ? 'Expenses are above recorded payments' : 'Payments received minus expenses paid'}
+					{balance < 0 ? 'Below zero — expenses are above recorded payments' : 'Payments received minus expenses paid'}
 				</p>
 				<div class="hero__meter" role="img" aria-label={`${formatPaise(vault.totals.earned)} received, ${formatPaise(vault.totals.spent)} spent`}>
 					<span class="hero__meter-in" style={`width: ${vault.totals.earned + vault.totals.spent ? vault.totals.earned / (vault.totals.earned + vault.totals.spent) * 100 : 50}%`}></span>
@@ -714,34 +796,34 @@
 					{/if}
 				</div>
 
-				{#if $vaultData.projects.length}
+				{#if activeProjects.length}
 					<div class="list">
-						{#each $vaultData.projects.slice(0, 3) as project (project.id)}
+						{#each activeProjects.slice(0, 3) as project (project.id)}
 							{@const paid = paidByProject[project.id] ?? 0}
-							{@const covered = project.estimatedPaise > 0 && paid >= project.estimatedPaise}
+							{@const pay = projectPaymentStatus(project.estimatedPaise, paid)}
 							<article class="row row--flat">
-								<span class="row__icon" class:row__icon--in={covered || project.status === 'done'} aria-hidden="true"><Icon name="target" size={19} /></span>
+								<span class="row__icon" class:row__icon--in={pay.covered} aria-hidden="true"><Icon name="target" size={19} /></span>
 								<div class="row__body">
 									<p class="row__title">{project.name}</p>
 									<p class="row__meta">{project.clientName}</p>
 									<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
 									<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
-									{#if !covered && project.estimatedPaise > 0}
-										<p class="project-remaining num">{formatPaise(Math.max(0, project.estimatedPaise - paid))} still to collect</p>
+									{#if pay.remainingPaise > 0}
+										<p class="project-remaining num">{formatPaise(pay.remainingPaise)} still to collect</p>
+									{:else if pay.excessPaise > 0}
+										<p class="project-remaining num">{formatPaise(pay.excessPaise)} above the estimate</p>
 									{/if}
 								</div>
 								<div class="row__side">
-									{#if covered || project.status === 'done'}
-										<span class="badge">Complete</span>
-									{:else}
-										<span class="badge badge--soft">Active</span>
-									{/if}
+									<span class="badge" class:badge--in={pay.covered}>{paymentStateLabel(pay.state)}</span>
 								</div>
 							</article>
 						{/each}
 					</div>
+				{:else if $vaultData.projects.length}
+					<EmptyState icon="target" title="No work in progress" message="Every project is marked work-done. Start something new, or reopen a project from the Projects tab."><button class="btn btn--outline btn--sm" type="button" onclick={() => switchTab('projects')}>See projects</button></EmptyState>
 				{:else}
-					<EmptyState icon="target" title="No projects yet" message="Add a project with an estimated price. When payments reach it, Vault marks the project complete."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button></EmptyState>
+					<EmptyState icon="target" title="No projects yet" message="Add a project with an estimated price. Vault tracks payments against it and shows when it is fully paid."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button></EmptyState>
 				{/if}
 			</section>
 
@@ -780,7 +862,7 @@
 						<h2 class="h2">Latest changes</h2>
 					</div>
 					{#if $vaultData.mutations.length}
-						<button class="btn btn--quiet btn--sm" type="button" onclick={() => switchTab('more')}>See all</button>
+						<button class="btn btn--quiet btn--sm" type="button" onclick={() => { switchTab('more'); morePanel = 'history'; }}>See all</button>
 					{/if}
 				</div>
 
@@ -865,7 +947,7 @@
 				<div class="section__title">
 					<p class="eyebrow">Projects</p>
 					<h2 class="h1">Projects</h2>
-					<p class="lead">Each project has an estimated price. Payments against it show how close it is to done.</p>
+					<p class="lead">Each project has an estimated price. Payments against it show what is still to collect; marking the work done is separate, and yours to decide.</p>
 				</div>
 				<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>
 					<Icon name="plus" size={17} /> Add
@@ -884,33 +966,37 @@
 					{#each filteredProjects as project (project.id)}
 						{@const paid = paidByProject[project.id] ?? 0}
 						{@const paymentCount = $vaultData.payments.filter((payment) => payment.projectId === project.id).length}
-						{@const covered = project.estimatedPaise > 0 && paid >= project.estimatedPaise}
+						{@const pay = projectPaymentStatus(project.estimatedPaise, paid)}
 						<article class="row">
-							<span class="row__icon" class:row__icon--in={covered || project.status === 'done'} aria-hidden="true"><Icon name="target" size={19} /></span>
+							<span class="row__icon" class:row__icon--in={pay.covered} aria-hidden="true"><Icon name="target" size={19} /></span>
 							<div class="row__body">
 								<p class="row__title">{project.name}</p>
 								<p class="row__meta">{project.clientName} · estimated {formatPaise(project.estimatedPaise)}</p>
 								<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
 								<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
-								{#if project.estimatedPaise > 0 && !covered}
-									<p class="project-remaining num">{formatPaise(Math.max(0, project.estimatedPaise - paid))} still to collect</p>
+								{#if pay.remainingPaise > 0}
+									<p class="project-remaining num">{formatPaise(pay.remainingPaise)} still to collect</p>
+								{:else if pay.excessPaise > 0}
+									<p class="project-remaining num">{formatPaise(pay.excessPaise)} above the estimate</p>
 								{/if}
 								<div class="project-actions">
-									{#if !covered}
+									{#if !pay.covered}
 										<button class="btn btn--outline btn--sm" type="button" onclick={() => openPaymentComposer(null, project)}><Icon name="plus" size={16} /> Add payment</button>
 									{/if}
 									{#if paymentCount > 0}
 										<button class="btn btn--quiet btn--sm" type="button" onclick={() => viewProjectPayments(project)}>View {paymentCount} payment{paymentCount === 1 ? '' : 's'}</button>
 									{/if}
+									<button class="btn btn--quiet btn--sm" type="button" disabled={actionBusy} onclick={() => void toggleProjectWorkStatus(project)}>
+										{project.status === 'done' ? 'Reopen work' : 'Mark work done'}
+									</button>
 								</div>
 								{#if project.note}<p class="row__note">{project.note}</p>{/if}
 								<p class="tiny">Last edited by {project.updatedBy} · {formatDateTime(project.updatedAt)}</p>
 							</div>
 							<div class="row__side">
-								{#if covered || project.status === 'done'}
-									<span class="badge">Complete</span>
-								{:else}
-									<span class="badge badge--soft">Active</span>
+								<span class="badge" class:badge--in={pay.covered}>{paymentStateLabel(pay.state)}</span>
+								{#if project.status === 'done'}
+									<span class="badge badge--soft">Work done</span>
 								{/if}
 								<div class="row__tools">
 									<button class="tool" type="button" onclick={() => openProjectComposer(project)} aria-label={`Edit ${project.name}`}>
@@ -955,6 +1041,13 @@
 					<Icon name="search" size={18} />
 					<input bind:value={query} type="search" placeholder="Search payments" aria-label="Search payments" />
 				</label>
+			{/if}
+
+			{#if filteredPayments.length}
+				<div class="between mt-14">
+					<p class="tiny" role="status">Showing {filteredPayments.length} of {$vaultData.payments.length}</p>
+					<button class="btn btn--quiet btn--sm" type="button" onclick={exportPaymentsCsv}>Export CSV</button>
+				</div>
 			{/if}
 
 			{#if filteredPayments.length}
@@ -1007,6 +1100,13 @@
 					<Icon name="search" size={18} />
 					<input bind:value={query} type="search" placeholder="Search expenses" aria-label="Search expenses" />
 				</label>
+			{/if}
+
+			{#if filteredExpenses.length}
+				<div class="between mt-14">
+					<p class="tiny" role="status">Showing {filteredExpenses.length} of {$vaultData.expenses.length}</p>
+					<button class="btn btn--quiet btn--sm" type="button" onclick={exportExpensesCsv}>Export CSV</button>
+				</div>
 			{/if}
 
 			{#if filteredExpenses.length}
@@ -1115,15 +1215,23 @@
 						<article class="settings-row settings-row--note">
 							<span>This device</span>
 							<strong>Offline copy is on</strong>
-							<small>Vault data stays cached in this browser so it opens without a network. Sign out on a device you do not control.</small>
+							<small>
+								Vault keeps a copy of your records in this browser so it works without a network. That copy is
+								not encrypted by Vault, and a normal sign-out leaves it behind — anyone with this browser profile
+								could read it. On a shared device, use “Sign out and clear local data”.
+							</small>
 						</article>
 					</div>
 
-					<button class="btn btn--danger btn--block mt-14" type="button" disabled={actionBusy} onclick={() => void onSignOut()}>
+					<button class="btn btn--danger btn--block mt-14" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('keep')}>
 						<Icon name="sign-out" size={18} /> Sign out of Vault
 					</button>
+					<button class="btn btn--outline btn--block mt-10" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('clear')}>
+						{signingOutNow ? 'Working…' : 'Sign out and clear local data'}
+					</button>
 					<p class="tiny mt-10">
-						Signed in as {user.email}. Signing out keeps the records safe in the cloud.
+						Signed in as {user.email}. Your records stay safe in the cloud either way; clearing only removes
+						this browser's offline copy, after any unsent changes have synced.
 					</p>
 				{/if}
 			</section>
@@ -1173,7 +1281,10 @@
 
 						<div class="field">
 							<span class="field__label">Client</span>
-							<ChipGroup label="Client" options={paymentClientOptions} value={paymentClientId} disabled={actionBusy} onChange={choosePaymentClient} />
+							{#if paymentClientOptions.length > 6}
+								<input class="input" bind:value={paymentClientQuery} type="search" placeholder="Search clients" aria-label="Search clients" disabled={actionBusy} />
+							{/if}
+							<ChipGroup label="Client" options={shownPaymentClientOptions} value={paymentClientId} disabled={actionBusy} onChange={choosePaymentClient} />
 						</div>
 
 						{#if $vaultData.projects.length}
@@ -1229,7 +1340,10 @@
 
 						<div class="field">
 							<span class="field__label">Client</span>
-							<ChipGroup label="Client for this project" options={activeClients.map((client) => ({ value: client.id, label: client.name }))} value={projectClientId} disabled={actionBusy} onChange={(value) => (projectClientId = value)} />
+							{#if paymentClientOptions.length > 6}
+								<input class="input" bind:value={projectClientQuery} type="search" placeholder="Search clients" aria-label="Search clients" disabled={actionBusy} />
+							{/if}
+							<ChipGroup label="Client for this project" options={shownProjectClientOptions} value={projectClientId} disabled={actionBusy} onChange={(value) => (projectClientId = value)} />
 						</div>
 
 						<div class="field">
@@ -1238,7 +1352,7 @@
 								<span class="amount-field__sign" aria-hidden="true">₹</span>
 								<input bind:value={projectEstimate} inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Estimated price in rupees" required disabled={actionBusy} />
 							</label>
-							<p class="hint">Record each installment as it arrives. Vault adds them up and marks the project complete when the received total reaches this estimate.</p>
+							<p class="hint">Record each installment as it arrives. Vault adds them up against this estimate and shows “Fully paid” when the received total reaches it.</p>
 						</div>
 
 						<label class="field">
@@ -1279,7 +1393,10 @@
 					{#if activeClients.length}
 						<div class="field">
 							<span class="field__label">For a client <em class="field__optional">optional</em></span>
-							<ChipGroup label="Client for this expense" options={expenseClientOptions} value={expenseClientId} disabled={actionBusy} onChange={(value) => (expenseClientId = value)} />
+							{#if expenseClientOptions.length > 7}
+								<input class="input" bind:value={expenseClientQuery} type="search" placeholder="Search clients" aria-label="Search clients" disabled={actionBusy} />
+							{/if}
+							<ChipGroup label="Client for this expense" options={shownExpenseClientOptions} value={expenseClientId} disabled={actionBusy} onChange={(value) => (expenseClientId = value)} />
 						</div>
 					{/if}
 
