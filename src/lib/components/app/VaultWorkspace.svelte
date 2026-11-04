@@ -21,6 +21,7 @@
 		updateExpense,
 		updatePayment,
 		updateProject,
+		updateVaultMember,
 		updateVaultTags,
 		vaultDataErrorMessage
 	} from '$lib/services/vault-data';
@@ -102,6 +103,12 @@
 	let expenseDate = todayDateKey();
 	let expenseDateMode: DateMode = 'today';
 	let expenseNote = '';
+
+	// Partner editing in settings
+	let editingPartner: PartnerKey | null = null;
+	let partnerEditName = '';
+	let partnerEditEmail = '';
+	let partnerEditBusy = false;
 
 	let paymentProjectId = '';
 	let tagDraft = '';
@@ -201,6 +208,32 @@
 
 	function partnerName(partner: PartnerKey): string {
 		return partner === 'a' ? vault.members.a.name : vault.members.b.name;
+	}
+
+	function openPartnerEditor(partner: PartnerKey): void {
+		editingPartner = partner;
+		partnerEditName = vault.members[partner].name;
+		partnerEditEmail = vault.members[partner].email;
+	}
+
+	function closePartnerEditor(): void {
+		editingPartner = null;
+		partnerEditName = '';
+		partnerEditEmail = '';
+	}
+
+	async function savePartnerEdit(_event: SubmitEvent): Promise<void> {
+		if (!editingPartner) return;
+		partnerEditBusy = true;
+		try {
+			await updateVaultMember(vault, editingPartner, partnerEditName, partnerEditEmail, user.email ?? '');
+			say(`${partnerEditName} updated.`);
+			closePartnerEditor();
+		} catch (error) {
+			actionError = vaultDataErrorMessage(error) ?? String(error);
+		} finally {
+			partnerEditBusy = false;
+		}
 	}
 
 	function say(text: string, tone: Toast['tone'] = 'ok'): void {
@@ -1180,18 +1213,60 @@
 							<strong>{vault.name}</strong>
 							<small>Created {formatDateTime(vault.createdAt)}</small>
 						</article>
-						<article class="settings-row">
-							<span>Partner A</span>
-							<strong>{vault.members.a.name}{ownPartner === 'a' ? ' (you)' : ''}</strong>
-							<small>{vault.members.a.email}</small>
-						</article>
-						<article class="settings-row">
-							<span>Partner B</span>
-							<strong>{vault.members.b.name}{ownPartner === 'b' ? ' (you)' : ''}</strong>
-							<small>{vault.members.b.email}</small>
-						</article>
-						<article class="settings-row">
-							<span>Spending tags</span>
+				<article class="settings-row">
+					<span>Partner A</span>
+					<strong>{vault.members.a.name}{ownPartner === 'a' ? ' (you)' : ''}</strong>
+					<small>{vault.members.a.email}</small>
+					{#if editingPartner !== 'a'}
+						<button class="settings-row__edit" type="button" disabled={actionBusy} onclick={() => openPartnerEditor('a')}>
+							<Icon name="pencil" size={14} />
+						</button>
+					{:else}
+						<button class="settings-row__edit settings-row__edit--active" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>
+							<Icon name="close" size={14} />
+						</button>
+					{/if}
+				</article>
+				<article class="settings-row">
+					<span>Partner B</span>
+					<strong>{vault.members.b.name}{ownPartner === 'b' ? ' (you)' : ''}</strong>
+					<small>{vault.members.b.email}</small>
+					{#if editingPartner !== 'b'}
+						<button class="settings-row__edit" type="button" disabled={actionBusy || ownPartner === 'b'} onclick={() => openPartnerEditor('b')}>
+							<Icon name="pencil" size={14} />
+						</button>
+					{:else}
+						<button class="settings-row__edit settings-row__edit--active" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>
+							<Icon name="close" size={14} />
+						</button>
+			{/if}
+		</article>
+			{#if editingPartner}
+				<article class="settings-row settings-row--edit">
+					<span class="edit-title">Editing {editingPartner === 'a' ? 'Partner A' : 'Partner B'}</span>
+					<form class="edit-form" onsubmit={(event) => void savePartnerEdit(event)}>
+						<label class="field">
+							<span class="field__label">Name</span>
+							<input class="input" bind:value={partnerEditName} maxlength="80" placeholder="Partner name" disabled={partnerEditBusy} required />
+						</label>
+						<label class="field">
+							<span class="field__label">Email</span>
+							<input class="input" bind:value={partnerEditEmail} type="email" maxlength="320" placeholder="partner@example.com" disabled={partnerEditBusy} required />
+						</label>
+						<p class="tiny">This email must belong to the other partner — you can't change your own.</p>
+						<div class="edit-actions">
+							<button class="btn btn--danger btn--sm" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>
+								Cancel
+							</button>
+							<button class="btn btn--primary btn--sm" type="submit" disabled={partnerEditBusy || !partnerEditName.trim() || !partnerEditEmail.trim()}>
+								{partnerEditBusy ? 'Saving…' : 'Save changes'}
+							</button>
+						</div>
+					</form>
+				</article>
+			{/if}
+			<article class="settings-row">
+			<span>Spending tags</span>
 							<strong>{vault.tags.length} tags</strong>
 							<small>Shown when you add an expense. Add the things you usually spend on — both of you share this list.</small>
 						</article>

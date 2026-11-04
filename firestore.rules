@@ -534,6 +534,25 @@ service cloud.firestore {
         && isValidVaultTags(request.resource.data.tags);
     }
 
+    // Editing one partner's name or email keeps the other partner's data intact.
+    // The actor's email must remain in the member list so they do not lock
+    // themselves out, and the two emails must stay different.
+    function validVaultMemberUpdate(vaultId) {
+      let newMembers = request.resource.data.members;
+      let actorEmail = authEmail();
+      return request.resource.data.keys().hasAll([
+          'name', 'createdAt', 'members', 'totals', 'tags', 'updatedAt'
+        ])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'members', 'updatedAt'
+        ])
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && hasValidMembers(newMembers)
+        && (newMembers.a.email == actorEmail || newMembers.b.email == actorEmail)
+        && newMembers.a.email != newMembers.b.email;
+    }
+
     match /vaults/{vaultId} {
       allow create: if signedInWithEmail()
         && isValidInitialVault()
@@ -546,7 +565,11 @@ service cloud.firestore {
           'totals', 'updatedAt', 'lastMutationId'
         ])
           ? validVaultAggregateUpdate(vaultId)
-          : validVaultTagsUpdate());
+          : request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'tags', 'updatedAt'
+          ])
+            ? validVaultTagsUpdate()
+            : validVaultMemberUpdate(vaultId));
 
       allow delete: if false;
     }

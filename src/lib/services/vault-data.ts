@@ -676,6 +676,32 @@ export async function updateVaultTags(vaultId: string, tags: string[], actorEmai
 	});
 }
 
+export async function updateVaultMember(vault: VaultSummary, partner: PartnerKey, name: string, email: string, actorEmail: string): Promise<void> {
+	const { db } = getFirebaseClient();
+	assertActorEmail(actorEmail);
+
+	const cleanName = assertText(name, 'partner name', 80, true);
+	const cleanEmail = assertText(email, 'partner email', 320, true);
+
+	if (cleanEmail === actorEmail) {
+		throw new Error('A partner cannot edit their own email from the app. Sign in as the other partner to change it, or use the Firebase console.');
+	}
+
+	const opposite = partner === 'a' ? 'b' : 'a';
+	const currentOpposite = vault.members[opposite];
+	if (cleanEmail === currentOpposite.email) {
+		throw new Error('That email is already used by the other partner.');
+	}
+
+	await updateDoc(doc(db, 'vaults', vault.id), {
+		members: {
+			a: partner === 'a' ? { name: cleanName, email: cleanEmail } : vault.members.a,
+			b: partner === 'b' ? { name: cleanName, email: cleanEmail } : vault.members.b
+		},
+		updatedAt: serverTimestamp()
+	});
+}
+
 export async function createPayment(vault: VaultSummary, input: PaymentInput, actorEmail: string): Promise<void> {
 	ensureVaultTotals(vault);
 	const { db } = getFirebaseClient();
