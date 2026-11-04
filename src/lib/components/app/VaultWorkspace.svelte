@@ -25,7 +25,7 @@
 		updateVaultTags,
 		vaultDataErrorMessage
 	} from '$lib/services/vault-data';
-	import { vaultData } from '$lib/stores/vault-data';
+	import { observeVaultData, vaultData } from '$lib/stores/vault-data';
 	import type {
 		ClientRecord,
 		ExpenseRecord,
@@ -118,6 +118,7 @@
 	let expenseClientQuery = '';
 	let projectClientQuery = '';
 	let signingOutNow = false;
+	let pullingUpdates = false;
 
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -639,6 +640,19 @@
 			}
 		} finally {
 			signingOutNow = false;
+		}
+	}
+
+	async function pullUpdates(): Promise<void> {
+		if (!vault.id) return;
+		pullingUpdates = true;
+		try {
+			observeVaultData(vault.id, true);
+			say('Updates pulled.');
+		} catch (error) {
+			say(vaultDataErrorMessage(error) ?? String(error), 'error');
+		} finally {
+			pullingUpdates = false;
 		}
 	}
 
@@ -1292,13 +1306,17 @@
 							<strong>Offline copy is on</strong>
 							<small>
 								Vault keeps a copy of your records in this browser so it works without a network. That copy is
-								not encrypted by Vault, and a normal sign-out leaves it behind — anyone with this browser profile
-								could read it. On a shared device, use “Sign out and clear local data”.
-							</small>
-						</article>
-					</div>
+			not encrypted by Vault, and a normal sign-out leaves it behind — anyone with this browser profile
+				could read it. On a shared device, use “Sign out and clear local data”.
+			</small>
+		</article>
+	</div>
 
-					<button class="btn btn--danger btn--block mt-14" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('keep')}>
+	<button class="btn btn--outline btn--block mt-14" type="button" disabled={actionBusy || pullingUpdates} onclick={() => void pullUpdates()}>
+		{pullingUpdates ? 'Updating…' : 'Pull new updates'}
+	</button>
+
+	<button class="btn btn--danger btn--block mt-10" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('keep')}>
 						<Icon name="sign-out" size={18} /> Sign out of Vault
 					</button>
 					<button class="btn btn--outline btn--block mt-10" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('clear')}>
