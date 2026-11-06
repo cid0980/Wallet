@@ -223,7 +223,8 @@
 		partnerEditEmail = '';
 	}
 
-	async function savePartnerEdit(_event: SubmitEvent): Promise<void> {
+	async function savePartnerEdit(event: SubmitEvent): Promise<void> {
+		event.preventDefault();
 		if (!editingPartner) return;
 		partnerEditBusy = true;
 		try {
