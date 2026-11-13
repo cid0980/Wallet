@@ -1728,24 +1728,22 @@
 
 						<section class="group">
 							<h3 class="group__title">Expense categories</h3>
-							<div class="panel panel--pad">
-								<p class="panel__meta">{vault.tags.length} tags · shown when you add an expense, shared with {otherName}.</p>
-								<div class="tag-wrap" aria-label="Expense categories">
-									{#each vault.tags as tag (tag)}
-										<span class="tag-chip">
-											{tag}
-											<button class="tag-chip__x" type="button" aria-label={`Remove ${tag} tag`} disabled={actionBusy} onclick={() => removeCommonTag(tag)}>
-												<Icon name="close" size={12} />
-											</button>
-										</span>
-									{/each}
-								</div>
-								<form class="tag-add" onsubmit={(event) => addCommonTag(event)}>
-									<input class="input" bind:value={tagDraft} maxlength="40" placeholder="New tag, e.g. Hosting" aria-label="New spending tag" disabled={actionBusy} />
-									<button class="btn btn--outline btn--sm" type="submit" disabled={actionBusy || !tagDraft.trim()}>Add</button>
+							<p class="panel__meta group__hint">{vault.tags.length} tags · shared with {otherName}</p>
+							<div class="panel">
+								{#each vault.tags as tag (tag)}
+									<div class="tag-row">
+										<span class="tag-row__name">{tag}</span>
+										<button class="tag-row__remove" type="button" aria-label={`Remove ${tag} tag`} disabled={actionBusy} onclick={() => removeCommonTag(tag)}>
+											<Icon name="close" size={14} />
+										</button>
+									</div>
+								{/each}
+								<form class="tag-row tag-row--add" onsubmit={(event) => addCommonTag(event)}>
+									<input class="tag-row__input" bind:value={tagDraft} maxlength="40" placeholder="New tag, e.g. Hosting" aria-label="New spending tag" disabled={actionBusy} />
+									<button class="btn btn--quiet btn--sm" type="submit" disabled={actionBusy || !tagDraft.trim()}>Add</button>
 								</form>
-								<p class="panel__meta">Removing a tag here doesn't change expenses already tagged with it.</p>
 							</div>
+							<p class="panel__meta group__hint">Removing a tag here doesn't change expenses already tagged with it.</p>
 						</section>
 
 						<section class="group">

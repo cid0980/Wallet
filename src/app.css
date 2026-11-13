@@ -4243,3 +4243,102 @@ body {
 .panel--form .edit-actions .btn {
 	flex: 0 0 auto;
 }
+
+/* Tags as rows of the panel, not a tray of separate pills. */
+.group__hint {
+	margin: -2px 0 2px 2px;
+}
+
+.tag-row {
+	display: flex;
+	min-height: 42px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 8px 0 14px;
+}
+
+.tag-row + .tag-row {
+	border-top: 1px solid var(--line);
+}
+
+.tag-row__name {
+	flex: 1;
+	min-width: 0;
+	font-size: 0.86rem;
+	font-weight: 600;
+	color: var(--ink);
+	overflow-wrap: anywhere;
+}
+
+.tag-row__remove {
+	display: grid;
+	width: 30px;
+	height: 30px;
+	flex: 0 0 auto;
+	place-items: center;
+	border: 0;
+	border-radius: var(--r-sm);
+	padding: 0;
+	background: transparent;
+	color: var(--ink-3);
+	cursor: pointer;
+	transition: background 120ms ease, color 120ms ease;
+}
+
+.tag-row__remove:hover:not(:disabled) {
+	background: var(--out-soft);
+	color: var(--out);
+}
+
+.tag-row__remove:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* The last row is the field that adds one, so the list stays a single block. */
+.tag-row--add {
+	min-height: 46px;
+	gap: 8px;
+	padding: 6px 8px 6px 14px;
+	background: var(--surface-2);
+}
+
+.tag-row--add:focus-within {
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--brand);
+}
+
+.tag-row__input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	padding: 6px 0;
+	background: transparent;
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.86rem;
+	outline: none;
+}
+
+.tag-row__input::placeholder {
+	color: var(--ink-3);
+}
+
+/* Denser rows: this list can hold up to twelve entries. */
+.tag-row {
+	min-height: 38px;
+}
+
+.tag-row__name {
+	font-size: 0.84rem;
+}
+
+/* While typing, the dial steps aside so it never covers the field or the
+   keyboard's bottom edge. */
+body:has(input:focus) .dial,
+body:has(textarea:focus) .dial {
+	opacity: 0;
+	transform: translateY(10px);
+	pointer-events: none;
+	transition: opacity 140ms ease, transform 140ms ease;
+}
