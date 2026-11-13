@@ -168,6 +168,10 @@
 	$: otherName = ownPartner === 'a' ? vault.members.b.name : vault.members.a.name;
 	$: ownInitial = ownName.trim().slice(0, 1).toUpperCase() || '•';
 	$: otherInitial = otherName.trim().slice(0, 1).toUpperCase() || '•';
+	$: partnerRows = [
+		{ key: 'a' as const, member: vault.members.a },
+		{ key: 'b' as const, member: vault.members.b }
+	];
 	$: ownFirst = ownName.trim().split(/\s+/)[0] || 'there';
 	$: selectedPaymentClient = activeClients.find((client) => client.id === paymentClientId) ?? null;
 	$: selectedExpenseClient = activeClients.find((client) => client.id === expenseClientId) ?? null;
@@ -1666,111 +1670,135 @@
 						<EmptyState icon="history" title="No history yet" message="Every change is logged with who made it and when, so nothing is a mystery later." />
 					{/if}
 				{:else}
-					<div class="list">
-						<article class="settings-row">
-							<span>Vault</span>
-							<strong>{vault.name}</strong>
-							<small>Created {formatDateTime(vault.createdAt)}</small>
-						</article>
-				<article class="settings-row">
-					<span>Partner A</span>
-					<strong>{vault.members.a.name}{ownPartner === 'a' ? ' (you)' : ''}</strong>
-					<small>{vault.members.a.email}</small>
-					{#if editingPartner !== 'a'}
-						<button class="settings-row__edit" type="button" disabled={actionBusy} onclick={() => openPartnerEditor('a')}>
-							<Icon name="pencil" size={14} />
-						</button>
-					{:else}
-						<button class="settings-row__edit settings-row__edit--active" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>
-							<Icon name="close" size={14} />
-						</button>
-					{/if}
-				</article>
-				<article class="settings-row">
-					<span>Partner B</span>
-					<strong>{vault.members.b.name}{ownPartner === 'b' ? ' (you)' : ''}</strong>
-					<small>{vault.members.b.email}</small>
-					{#if editingPartner !== 'b'}
-						<button class="settings-row__edit" type="button" disabled={actionBusy || ownPartner === 'b'} onclick={() => openPartnerEditor('b')}>
-							<Icon name="pencil" size={14} />
-						</button>
-					{:else}
-						<button class="settings-row__edit settings-row__edit--active" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>
-							<Icon name="close" size={14} />
-						</button>
-			{/if}
-		</article>
-			{#if editingPartner}
-				<article class="settings-row settings-row--edit">
-					<span class="edit-title">Editing {editingPartner === 'a' ? 'Partner A' : 'Partner B'}</span>
-					<form class="edit-form" onsubmit={(event) => void savePartnerEdit(event)}>
-						<label class="field">
-							<span class="field__label">Name</span>
-							<input class="input" bind:value={partnerEditName} maxlength="80" placeholder="Partner name" disabled={partnerEditBusy} required />
-						</label>
-						<label class="field">
-							<span class="field__label">Email</span>
-							<input class="input" bind:value={partnerEditEmail} type="email" maxlength="320" placeholder="partner@example.com" disabled={partnerEditBusy} required />
-						</label>
-						<p class="tiny">This email must belong to the other partner — you can't change your own.</p>
-						<div class="edit-actions">
-							<button class="btn btn--danger btn--sm" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>
-								Cancel
-							</button>
-							<button class="btn btn--primary btn--sm" type="submit" disabled={partnerEditBusy || !partnerEditName.trim() || !partnerEditEmail.trim()}>
-								{partnerEditBusy ? 'Saving…' : 'Save changes'}
-							</button>
-						</div>
-					</form>
-				</article>
-			{/if}
-			<article class="settings-row">
-			<span>Spending tags</span>
-							<strong>{vault.tags.length} tags</strong>
-							<small>Shown when you add an expense. Add the things you usually spend on — both of you share this list.</small>
-						</article>
-						<div class="tag-block">
-							<div class="chips" aria-label="Common spending tags">
-								{#each vault.tags as tag (tag)}
-									<span class="chip chip--on chip--tag">
-										<Icon name="tag" size={15} /> {tag}
-										<button class="chip__x" type="button" aria-label={`Remove ${tag} tag`} disabled={actionBusy} onclick={() => removeCommonTag(tag)}>
-											<Icon name="close" size={13} />
-										</button>
-									</span>
+					<div class="settings">
+						<section class="group">
+							<h3 class="group__title">Vault</h3>
+							<div class="panel">
+								<div class="panel__row panel__row--kv">
+									<p class="panel__label">Name</p>
+									<p class="panel__value">{vault.name}</p>
+								</div>
+								<div class="panel__row panel__row--kv">
+									<p class="panel__label">Created</p>
+									<p class="panel__value">{formatDateTime(vault.createdAt)}</p>
+								</div>
+							</div>
+						</section>
+
+						<section class="group">
+							<h3 class="group__title">People</h3>
+							<div class="panel">
+								{#each partnerRows as entry (entry.key)}
+									<div class="panel__row">
+										<span class="panel__face" class:panel__face--you={ownPartner === entry.key} aria-hidden="true">{initial(entry.member.name)}</span>
+										<div class="panel__body">
+											<p class="panel__value">{entry.member.name}{ownPartner === entry.key ? ' · you' : ''}</p>
+											<p class="panel__meta">{entry.member.email}</p>
+										</div>
+										{#if ownPartner !== entry.key}
+											<button class="panel__action" type="button" disabled={actionBusy || partnerEditBusy} onclick={() => (editingPartner === entry.key ? closePartnerEditor() : openPartnerEditor(entry.key))}>
+												{editingPartner === entry.key ? 'Close' : 'Edit'}
+											</button>
+										{/if}
+									</div>
 								{/each}
 							</div>
-							<form class="tag-add" onsubmit={(event) => addCommonTag(event)}>
-								<input class="input" bind:value={tagDraft} maxlength="40" placeholder="New tag, e.g. Hosting" aria-label="New spending tag" disabled={actionBusy} />
-								<button class="btn btn--outline btn--sm" type="submit" disabled={actionBusy || !tagDraft.trim()}>Add tag</button>
-							</form>
-							<p class="tiny">Tags stay on past expenses even after you remove them from this list.</p>
-						</div>
-						<article class="settings-row settings-row--note">
-							<span>This device</span>
-							<strong>Offline copy is on</strong>
-							<small>
-								Vault keeps a copy of your records in this browser so it works without a network. That copy is
-			not encrypted by Vault, and a normal sign-out leaves it behind — anyone with this browser profile
-				could read it. On a shared device, use “Sign out and clear local data”.
-			</small>
-		</article>
-	</div>
 
-	<button class="btn btn--outline btn--block mt-14" type="button" disabled={actionBusy || pullingUpdates} onclick={() => void pullUpdates()}>
-		{pullingUpdates ? 'Updating…' : 'Pull new updates'}
-	</button>
+							{#if editingPartner}
+								<form class="panel panel--form" onsubmit={(event) => void savePartnerEdit(event)}>
+									<p class="group__title">Editing {editingPartner === 'a' ? vault.members.a.name : vault.members.b.name}</p>
+									<label class="field">
+										<span class="field__label">Name</span>
+										<input class="input" bind:value={partnerEditName} maxlength="80" placeholder="Partner name" disabled={partnerEditBusy} required />
+									</label>
+									<label class="field">
+										<span class="field__label">Email</span>
+										<input class="input" bind:value={partnerEditEmail} type="email" maxlength="320" placeholder="partner@example.com" disabled={partnerEditBusy} required />
+									</label>
+									<p class="panel__meta">This address belongs to the other partner; you can't change your own.</p>
+									<div class="edit-actions">
+										<button class="btn btn--quiet btn--sm" type="button" disabled={partnerEditBusy} onclick={() => closePartnerEditor()}>Cancel</button>
+										<button class="btn btn--primary btn--sm" type="submit" disabled={partnerEditBusy || !partnerEditName.trim() || !partnerEditEmail.trim()}>
+											{partnerEditBusy ? 'Saving…' : 'Save'}
+										</button>
+									</div>
+								</form>
+							{/if}
+						</section>
 
-	<button class="btn btn--danger btn--block mt-10" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('keep')}>
-						<Icon name="sign-out" size={18} /> Sign out of Vault
-					</button>
-					<button class="btn btn--outline btn--block mt-10" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('clear')}>
-						{signingOutNow ? 'Working…' : 'Sign out and clear local data'}
-					</button>
-					<p class="tiny mt-10">
-						Signed in as {user.email}. Your records stay safe in the cloud either way; clearing only removes
-						this browser's offline copy, after any unsent changes have synced.
-					</p>
+						<section class="group">
+							<h3 class="group__title">Expense categories</h3>
+							<div class="panel panel--pad">
+								<p class="panel__meta">{vault.tags.length} tags · shown when you add an expense, shared with {otherName}.</p>
+								<div class="tag-wrap" aria-label="Expense categories">
+									{#each vault.tags as tag (tag)}
+										<span class="tag-chip">
+											{tag}
+											<button class="tag-chip__x" type="button" aria-label={`Remove ${tag} tag`} disabled={actionBusy} onclick={() => removeCommonTag(tag)}>
+												<Icon name="close" size={12} />
+											</button>
+										</span>
+									{/each}
+								</div>
+								<form class="tag-add" onsubmit={(event) => addCommonTag(event)}>
+									<input class="input" bind:value={tagDraft} maxlength="40" placeholder="New tag, e.g. Hosting" aria-label="New spending tag" disabled={actionBusy} />
+									<button class="btn btn--outline btn--sm" type="submit" disabled={actionBusy || !tagDraft.trim()}>Add</button>
+								</form>
+								<p class="panel__meta">Removing a tag here doesn't change expenses already tagged with it.</p>
+							</div>
+						</section>
+
+						<section class="group">
+							<h3 class="group__title">This device</h3>
+							<div class="panel">
+								<div class="panel__row panel__row--stack">
+									<div class="panel__body">
+										<p class="panel__value">Offline copy is on</p>
+										<p class="panel__meta">Records stay readable without a network. The copy isn't encrypted, and a normal sign-out leaves it here.</p>
+									</div>
+								</div>
+								<div class="panel__row">
+									<div class="panel__body">
+										<p class="panel__value">Reload from the cloud</p>
+										<p class="panel__meta">Fetch anything saved on the other phone.</p>
+									</div>
+									<button class="panel__action" type="button" disabled={actionBusy || pullingUpdates} onclick={() => void pullUpdates()}>
+										{pullingUpdates ? 'Updating…' : 'Pull'}
+									</button>
+								</div>
+							</div>
+						</section>
+
+						<section class="group">
+							<h3 class="group__title">Account</h3>
+							<div class="panel">
+								<div class="panel__row">
+									<div class="panel__body">
+										<p class="panel__label">Signed in as</p>
+										<p class="panel__value">{user.email}</p>
+									</div>
+								</div>
+								<div class="panel__row">
+									<div class="panel__body">
+										<p class="panel__value">Sign out of Vault</p>
+										<p class="panel__meta">Keeps this device's offline copy.</p>
+									</div>
+									<button class="panel__action" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('keep')}>
+										{signingOutNow ? 'Working…' : 'Sign out'}
+									</button>
+								</div>
+								<div class="panel__row">
+									<div class="panel__body">
+										<p class="panel__value panel__value--danger">Sign out and clear local data</p>
+										<p class="panel__meta">For a shared device. Removes the offline copy once everything has synced.</p>
+									</div>
+									<button class="panel__action panel__action--danger" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('clear')}>
+										Clear
+									</button>
+								</div>
+							</div>
+						</section>
+					</div>
 				{/if}
 			</section>
 					</div>

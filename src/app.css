@@ -4024,3 +4024,222 @@ body {
 		font-size: 0.76rem;
 	}
 }
+
+/* ------------------------------------------------------ grouped settings --- */
+
+/* Settings read as five labelled groups of rows, not a stack of cards. */
+.settings {
+	display: grid;
+	gap: 20px;
+	max-width: 44rem;
+}
+
+.group {
+	display: grid;
+	gap: 8px;
+}
+
+.group__title {
+	font-size: 0.68rem;
+	font-weight: 750;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	padding-left: 2px;
+}
+
+.panel {
+	overflow: hidden;
+	border: 1px solid var(--line);
+	border-radius: var(--r-lg);
+	background: var(--surface);
+}
+
+.panel--pad {
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+}
+
+.panel--form {
+	display: grid;
+	gap: 12px;
+	padding: 14px;
+}
+
+.panel__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+}
+
+.panel__row + .panel__row {
+	border-top: 1px solid var(--line);
+}
+
+.panel__row--stack {
+	align-items: flex-start;
+}
+
+.panel__body {
+	display: grid;
+	flex: 1;
+	gap: 2px;
+	min-width: 0;
+}
+
+.panel__label {
+	font-size: 0.66rem;
+	font-weight: 750;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+
+.panel__value {
+	font-size: 0.88rem;
+	font-weight: 620;
+	color: var(--ink);
+	overflow-wrap: anywhere;
+}
+
+.panel__value--danger {
+	color: var(--danger);
+}
+
+.panel__meta {
+	font-size: 0.76rem;
+	line-height: 1.45;
+	color: var(--ink-3);
+	overflow-wrap: anywhere;
+}
+
+.panel__face {
+	display: grid;
+	width: 30px;
+	height: 30px;
+	flex: 0 0 auto;
+	place-items: center;
+	border: 1.5px solid var(--line-2);
+	border-radius: 50%;
+	background: var(--surface-2);
+	color: var(--ink-2);
+	font-size: 0.74rem;
+	font-weight: 750;
+}
+
+.panel__face--you {
+	border-color: var(--ink);
+	background: var(--ink);
+	color: var(--surface);
+}
+
+.panel__action {
+	min-height: 32px;
+	flex: 0 0 auto;
+	border: 1px solid var(--line-2);
+	border-radius: var(--r-sm);
+	padding: 0 11px;
+	background: var(--surface);
+	color: var(--ink-2);
+	font: inherit;
+	font-size: 0.76rem;
+	font-weight: 620;
+	cursor: pointer;
+	transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.panel__action:hover:not(:disabled) {
+	border-color: var(--ink-3);
+	background: var(--surface-3);
+	color: var(--ink);
+}
+
+.panel__action:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.panel__action--danger {
+	border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+	color: var(--danger);
+}
+
+.panel__action--danger:hover:not(:disabled) {
+	border-color: var(--danger);
+	background: var(--out-soft);
+	color: var(--danger);
+}
+
+/* Compact tag chips: the row is a list of words, not a toolbar. */
+.tag-wrap {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.tag-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border: 1px solid var(--line);
+	border-radius: var(--r-pill);
+	padding: 3px 4px 3px 10px;
+	background: var(--surface-2);
+	color: var(--ink-2);
+	font-size: 0.78rem;
+	font-weight: 600;
+}
+
+.tag-chip__x {
+	display: grid;
+	width: 20px;
+	height: 20px;
+	place-items: center;
+	border: 0;
+	border-radius: 50%;
+	padding: 0;
+	background: transparent;
+	color: var(--ink-3);
+	cursor: pointer;
+	transition: background 120ms ease, color 120ms ease;
+}
+
+.tag-chip__x:hover:not(:disabled) {
+	background: var(--out-soft);
+	color: var(--out);
+}
+
+.tag-chip__x:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+@media (max-width: 1023px) {
+	.panel__action {
+		min-height: 36px;
+	}
+}
+
+/* Label left, value right: a settings table, not a card per fact. */
+.panel__row--kv .panel__label {
+	flex: 0 0 92px;
+	margin: 0;
+}
+
+.panel__row--kv .panel__value {
+	flex: 1;
+	margin: 0;
+	text-align: right;
+}
+
+.panel--form .edit-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.panel--form .edit-actions .btn {
+	flex: 0 0 auto;
+}
