@@ -3741,3 +3741,169 @@ body {
 .sidenav__meta {
 	overflow-wrap: anywhere;
 }
+
+/* ------------------------------------------------- phone section dial ----- */
+
+/* Desktop keeps the sidebar; the dial only exists where a thumb is. */
+.dial {
+	display: none;
+}
+
+@media (max-width: 1023px) {
+	/* The six-item strip retires on a phone. */
+	.tabs {
+		display: none;
+	}
+
+	.view,
+	.shell__content {
+		padding-bottom: calc(104px + env(safe-area-inset-bottom));
+	}
+
+	/* Notifications sit above the button instead of under it. */
+	.toast {
+		bottom: calc(88px + env(safe-area-inset-bottom));
+	}
+
+	.dial {
+		position: fixed;
+		z-index: 60;
+		right: 0;
+		bottom: calc(18px + env(safe-area-inset-bottom));
+		left: 0;
+		display: block;
+		height: 58px;
+		pointer-events: none;
+	}
+
+	.dial__scrim {
+		position: fixed;
+		z-index: 0;
+		inset: 0;
+		border: 0;
+		padding: 0;
+		background: rgb(20 30 24 / 34%);
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 180ms ease, visibility 0s linear 180ms;
+		pointer-events: none;
+	}
+
+	.dial.is-open .dial__scrim {
+		opacity: 1;
+		visibility: visible;
+		transition-delay: 0s;
+		pointer-events: auto;
+	}
+
+	.dial__ring {
+		position: absolute;
+		z-index: 2;
+		left: 50%;
+		bottom: 29px;
+		width: 0;
+		height: 0;
+	}
+
+	/* A hairline arc behind the bubbles: it reads as one dial, not six dots. */
+	.dial__track {
+		position: absolute;
+		left: -120px;
+		bottom: -120px;
+		width: 240px;
+		height: 240px;
+		fill: none;
+		stroke: rgb(255 255 255 / 80%);
+		stroke-width: 1;
+		stroke-dasharray: 2 6;
+		stroke-linecap: round;
+		opacity: 0;
+		transition: opacity 200ms ease 80ms;
+	}
+
+	.dial.is-open .dial__track {
+		opacity: 1;
+	}
+
+	.dial__item {
+		position: absolute;
+		left: 0;
+		bottom: 0;
+		display: grid;
+		width: 46px;
+		height: 46px;
+		margin: 0 0 -23px -23px;
+		place-items: center;
+		border: 1px solid var(--line-2);
+		border-radius: 50%;
+		background: var(--surface);
+		color: var(--ink-2);
+		box-shadow: 0 10px 22px -16px rgb(9 26 17 / 70%);
+		/* Parked on the button, tiny and invisible, until the dial opens. */
+		transform: rotate(calc(-1 * var(--a))) translateX(0) rotate(var(--a)) scale(0.35);
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			transform 300ms cubic-bezier(0.2, 0.9, 0.25, 1.04),
+			opacity 180ms ease,
+			visibility 0s linear 300ms;
+		transition-delay: calc(var(--i) * 26ms), calc(var(--i) * 26ms), calc(300ms + var(--i) * 26ms);
+	}
+
+	.dial.is-open .dial__item {
+		transform: rotate(calc(-1 * var(--a))) translateX(110px) rotate(var(--a)) scale(1);
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+		transition-delay: calc(var(--i) * 26ms);
+	}
+
+	.dial__item:hover {
+		border-color: var(--ink-3);
+		color: var(--ink);
+	}
+
+	/* Where you are, marked with the brand tint. */
+	.dial__item.is-on {
+		border-color: var(--brand);
+		background: var(--brand-soft);
+		color: var(--brand);
+	}
+
+	.dial__fab {
+		position: absolute;
+		z-index: 3;
+		left: 50%;
+		bottom: 0;
+		display: grid;
+		width: 58px;
+		height: 58px;
+		margin-left: -29px;
+		place-items: center;
+		border: 1px solid rgb(255 255 255 / 14%);
+		border-radius: 50%;
+		background: var(--ink);
+		color: #fff;
+		box-shadow: 0 14px 28px -16px rgb(9 26 17 / 80%);
+		pointer-events: auto;
+		transition: transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1.05), background 140ms ease;
+	}
+
+	.dial__fab:active {
+		transform: scale(0.94);
+	}
+
+	.dial.is-open .dial__fab {
+		background: var(--ink-2);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dial__item,
+	.dial__fab,
+	.dial__scrim,
+	.dial__track {
+		transition-duration: 1ms !important;
+		transition-delay: 0s !important;
+	}
+}

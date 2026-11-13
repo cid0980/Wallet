@@ -73,8 +73,8 @@
 
 	.demo-badge {
 		position: fixed;
-		left: 12px;
-		bottom: 12px;
+		top: 8px;
+		right: 8px;
 		z-index: 9999;
 		display: flex;
 		align-items: center;

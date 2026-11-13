@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { User } from 'firebase/auth';
 
+	import { tick } from 'svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import type { IconName } from '$lib/components/ui/icon-names';
 	import ChipGroup from '$lib/components/ui/ChipGroup.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Progress from '$lib/components/ui/Progress.svelte';
@@ -80,6 +82,19 @@
 	export let user: User;
 	/** Resolves to a failure message to show, or null when sign-out succeeded. */
 	export let onSignOut: (mode?: 'keep' | 'clear') => Promise<string | null>;
+
+	/**
+	 * One list drives both navigation surfaces: the sidebar on desktop and the
+	 * dial on phones, so a label or icon can never drift between them.
+	 */
+	const sections: { id: MainTab; label: string; icon: IconName }[] = [
+		{ id: 'home', label: 'Home', icon: 'home' },
+		{ id: 'projects', label: 'Projects', icon: 'target' },
+		{ id: 'clients', label: 'Clients', icon: 'clients' },
+		{ id: 'payments', label: 'Payments', icon: 'money-in' },
+		{ id: 'expenses', label: 'Expenses', icon: 'money-out' },
+		{ id: 'more', label: 'More', icon: 'more' }
+	];
 
 	let activeTab: MainTab = 'home';
 	let morePanel: MorePanel = 'history';
@@ -366,6 +381,34 @@
 		} else {
 			expenseDateMode = 'custom';
 		}
+	}
+
+	/** The dial is a phone affordance: it opens, picks a section, and closes. */
+	let dialOpen = false;
+
+	$: currentSection = sections.find((section) => section.id === activeTab) ?? sections[0];
+
+	/** Six bubbles on the arc above the button, fanning from left to right. */
+	$: dialItems = sections.map((section, index) => ({
+		...section,
+		angle: 180 - ((index + 0.5) * 180) / sections.length
+	}));
+
+	function chooseSection(id: MainTab): void {
+		dialOpen = false;
+		switchTab(id);
+	}
+
+	/** Opening moves focus to where you are; closing gives it back to the button. */
+	async function toggleDial(): Promise<void> {
+		dialOpen = !dialOpen;
+		await tick();
+
+		const target = dialOpen
+			? document.querySelector<HTMLElement>('.dial__item.is-on')
+			: document.querySelector<HTMLElement>('.dial__fab');
+
+		target?.focus();
 	}
 
 	function switchTab(tab: MainTab): void {
@@ -969,30 +1012,12 @@
 		</div>
 
 		<nav class="tabs" aria-label="Vault sections">
-			<button class="tab" class:tab--on={activeTab === 'home'} type="button" aria-current={activeTab === 'home'} onclick={() => switchTab('home')}>
-				<Icon name="home" size={17} />
-				<span class="tab__label">Home</span>
-			</button>
-			<button class="tab" class:tab--on={activeTab === 'projects'} type="button" aria-current={activeTab === 'projects'} onclick={() => switchTab('projects')}>
-				<Icon name="target" size={17} />
-				<span class="tab__label">Projects</span>
-			</button>
-			<button class="tab" class:tab--on={activeTab === 'clients'} type="button" aria-current={activeTab === 'clients'} onclick={() => switchTab('clients')}>
-				<Icon name="clients" size={17} />
-				<span class="tab__label">Clients</span>
-			</button>
-			<button class="tab" class:tab--on={activeTab === 'payments'} type="button" aria-current={activeTab === 'payments'} onclick={() => switchTab('payments')}>
-				<Icon name="money-in" size={17} />
-				<span class="tab__label">Payments</span>
-			</button>
-			<button class="tab" class:tab--on={activeTab === 'expenses'} type="button" aria-current={activeTab === 'expenses'} onclick={() => switchTab('expenses')}>
-				<Icon name="money-out" size={17} />
-				<span class="tab__label">Expenses</span>
-			</button>
-			<button class="tab" class:tab--on={activeTab === 'more'} type="button" aria-current={activeTab === 'more'} onclick={() => switchTab('more')}>
-				<Icon name="more" size={17} />
-				<span class="tab__label">More</span>
-			</button>
+			{#each sections as section (section.id)}
+				<button class="tab" class:tab--on={activeTab === section.id} type="button" aria-current={activeTab === section.id} onclick={() => switchTab(section.id)}>
+					<Icon name={section.icon} size={17} />
+					<span class="tab__label">{section.label}</span>
+				</button>
+			{/each}
 		</nav>
 	</aside>
 
@@ -1654,7 +1679,41 @@
 		{/if}
 	</main>
 	</div>
+
+	<!-- Phone navigation: one button that blooms into a ring of sections. -->
+	<nav class="dial" class:is-open={dialOpen} aria-label="Vault sections">
+		<button class="dial__scrim" type="button" tabindex={-1} aria-label="Close sections" onclick={() => (dialOpen = false)}></button>
+		<div class="dial__ring" id="vault-dial" aria-hidden={!dialOpen}>
+			<svg class="dial__track" viewBox="0 0 240 240" aria-hidden="true">
+				<path d="M220.4 93.1A104 104 0 0 0 19.6 93.1" />
+			</svg>
+			{#each dialItems as item, index (item.id)}
+				<button
+					class="dial__item"
+					class:is-on={activeTab === item.id}
+					style={`--a: ${item.angle}deg; --i: ${index}`}
+					type="button"
+					aria-current={activeTab === item.id}
+					aria-label={item.label}
+					tabindex={dialOpen ? 0 : -1}
+					onclick={() => chooseSection(item.id)}
+				>
+					<Icon name={item.icon} size={19} />
+				</button>
+			{/each}
+		</div>
+		<button class="dial__fab" type="button" aria-expanded={dialOpen} aria-controls="vault-dial" onclick={() => void toggleDial()}>
+			{#if dialOpen}
+				<Icon name="close" size={22} />
+			{:else}
+				<Icon name={currentSection.icon} size={22} />
+			{/if}
+			<span class="sr-only">{dialOpen ? 'Close sections' : `Sections, currently ${currentSection.label}`}</span>
+		</button>
+	</nav>
 </div>
+
+<svelte:window onkeydown={(event) => { if (event.key === 'Escape' && dialOpen) dialOpen = false; }} />
 
 {#if composer !== 'none'}
 	<Sheet
