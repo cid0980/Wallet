@@ -2201,10 +2201,7 @@ body {
 
 .sidenav__meta {
 	font-size: 0.72rem;
-	color: var(--ink-3);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: anywhere;
 }
 
 .sidenav__actions {
@@ -3704,4 +3701,43 @@ body {
 .project-actions .btn--quiet:hover {
 	border-color: var(--line);
 	background: var(--surface-2);
+}
+
+/* ------------------------------------------- vault identity in the top bar -- */
+
+/* The sync state belongs on the identity line: it is information, not an
+   action, so the bar itself carries no buttons. Account lives in More. */
+.sidenav__sync {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 6px;
+	font-size: 0.74rem;
+	font-weight: 600;
+	color: var(--ink-3);
+	white-space: nowrap;
+}
+
+.sidenav__sync-dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.sidenav__sync--ok {
+	color: var(--brand);
+}
+
+.sidenav__sync--offline {
+	color: var(--warn);
+}
+
+.sidenav__sync--offline .sidenav__sync-dot {
+	background: var(--warn);
+}
+
+/* Never clip a name: if it needs a second line, it gets one. */
+.sidenav__meta {
+	overflow-wrap: anywhere;
 }

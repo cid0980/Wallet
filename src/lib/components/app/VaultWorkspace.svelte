@@ -954,29 +954,17 @@
 				<span class="sidenav__logo" aria-hidden="true">{vault.name.trim().slice(0, 1).toUpperCase() || 'V'}</span>
 				<span class="sidenav__id">
 					<span class="sidenav__name">{vault.name}</span>
-					<span class="sidenav__meta">Shared with {otherName}</span>
+					<span class="sidenav__meta">
+						Shared with {otherName}
+						{#if isOffline}
+							<span class="sidenav__sync sidenav__sync--offline" role="status"><span class="sidenav__sync-dot" aria-hidden="true"></span>Offline</span>
+						{:else if isSyncing}
+							<span class="sidenav__sync" role="status"><span class="sidenav__sync-dot" aria-hidden="true"></span>Saving</span>
+						{:else}
+							<span class="sidenav__sync sidenav__sync--ok" role="status"><span class="sidenav__sync-dot" aria-hidden="true"></span>Synced</span>
+						{/if}
+					</span>
 				</span>
-			</div>
-			<div class="sidenav__actions">
-				{#if isOffline}
-					<span class="status status--offline" role="status"><span class="status__dot" aria-hidden="true"></span>Offline</span>
-				{:else if isSyncing}
-					<span class="status" role="status"><span class="status__dot" aria-hidden="true"></span>Saving</span>
-				{:else}
-					<span class="status status--live" role="status"><span class="status__dot" aria-hidden="true"></span>Synced</span>
-				{/if}
-				<button
-					class="avatar"
-					class:avatar--b={ownPartner === 'b'}
-					type="button"
-					aria-label="Open vault settings"
-					onclick={() => {
-						switchTab('more');
-						morePanel = 'settings';
-					}}
-				>
-					{ownInitial}
-				</button>
 			</div>
 		</div>
 
@@ -1015,7 +1003,7 @@
 				<div class="view__head">
 					<div class="view__titles">
 						<h2 class="h1">Hi {ownFirst}.</h2>
-						<p class="view__sub">Shared with {otherName} · {activeProjects.length} project{activeProjects.length === 1 ? '' : 's'} in progress</p>
+						<p class="view__sub">{activeProjects.length} project{activeProjects.length === 1 ? '' : 's'} in progress · {formatPaise(projectsSummary.outstandingPaise)} still to collect</p>
 					</div>
 				</div>
 				<div class="view__cols">
