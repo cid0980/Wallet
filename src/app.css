@@ -3907,3 +3907,17 @@ body {
 		transition-delay: 0s !important;
 	}
 }
+
+/* The bubble a drag is aimed at: same weight as the active one, but brand. */
+.dial__item.is-aimed {
+	border-color: var(--brand);
+	background: var(--brand-soft);
+	color: var(--brand);
+	box-shadow: 0 0 0 4px rgb(11 122 68 / 16%);
+}
+
+/* The gesture needs raw pointer moves, so the browser must not pan first. */
+.dial__fab,
+.dial__scrim {
+	touch-action: none;
+}

@@ -399,6 +399,89 @@
 		switchTab(id);
 	}
 
+	/**
+	 * Swipe support: the ring is laid out on known angles, so a drag can be
+	 * matched to the bubble it points at. Dragging out of the button blooms the
+	 * ring immediately, the aimed bubble lights up, and releasing goes there.
+	 */
+	let swipeStart: { x: number; y: number; active: boolean } | null = null;
+	let swipeTarget: MainTab | null = null;
+	let swipeConsumed = false;
+
+	function aimedSection(dx: number, dy: number): MainTab | null {
+		if (Math.hypot(dx, dy) < 12) return null;
+
+		// 0° is due right, 90° is straight up; downward drags aim at nothing.
+		const angle = (Math.atan2(-dy, dx) * 180) / Math.PI;
+		if (angle < 0 || angle > 180) return null;
+
+		let best = dialItems[0];
+		let bestDelta = Number.POSITIVE_INFINITY;
+
+		for (const item of dialItems) {
+			const delta = Math.abs(item.angle - angle);
+			if (delta < bestDelta) {
+				bestDelta = delta;
+				best = item;
+			}
+		}
+
+		return best.id;
+	}
+
+	function startSwipe(event: PointerEvent): void {
+		if (event.pointerType === 'mouse' && event.button !== 0) return;
+		swipeStart = { x: event.clientX, y: event.clientY, active: true };
+		swipeTarget = null;
+		swipeConsumed = false;
+	}
+
+	function moveSwipe(event: PointerEvent): void {
+		if (!swipeStart?.active) return;
+
+		const dx = event.clientX - swipeStart.x;
+		const dy = event.clientY - swipeStart.y;
+
+		if (!dialOpen && Math.hypot(dx, dy) > 10) dialOpen = true;
+
+		swipeTarget = aimedSection(dx, dy);
+	}
+
+	function endSwipe(event: PointerEvent): void {
+		if (!swipeStart?.active) return;
+
+		const dx = event.clientX - swipeStart.x;
+		const dy = event.clientY - swipeStart.y;
+		swipeStart.active = false;
+
+		const target = aimedSection(dx, dy);
+		swipeTarget = null;
+
+		if (target && Math.hypot(dx, dy) >= 28) {
+			// A click follows this gesture on some browsers; it must not toggle.
+			swipeConsumed = true;
+			chooseSection(target);
+		}
+	}
+
+	function onFabClick(): void {
+		if (swipeConsumed) {
+			swipeConsumed = false;
+			return;
+		}
+
+		void toggleDial();
+	}
+
+	function onScrimClick(): void {
+		if (swipeConsumed) {
+			swipeConsumed = false;
+			return;
+		}
+
+		dialOpen = false;
+	}
+
 	/** Opening moves focus to where you are; closing gives it back to the button. */
 	async function toggleDial(): Promise<void> {
 		dialOpen = !dialOpen;
@@ -1681,8 +1764,16 @@
 	</div>
 
 	<!-- Phone navigation: one button that blooms into a ring of sections. -->
-	<nav class="dial" class:is-open={dialOpen} aria-label="Vault sections">
-		<button class="dial__scrim" type="button" tabindex={-1} aria-label="Close sections" onclick={() => (dialOpen = false)}></button>
+	<nav
+		class="dial"
+		class:is-open={dialOpen}
+		aria-label="Vault sections"
+		onpointerdown={startSwipe}
+		onpointermove={moveSwipe}
+		onpointerup={endSwipe}
+		onpointercancel={() => { if (swipeStart) swipeStart.active = false; swipeTarget = null; }}
+	>
+		<button class="dial__scrim" type="button" tabindex={-1} aria-label="Close sections" onclick={onScrimClick}></button>
 		<div class="dial__ring" id="vault-dial" aria-hidden={!dialOpen}>
 			<svg class="dial__track" viewBox="0 0 240 240" aria-hidden="true">
 				<path d="M220.4 93.1A104 104 0 0 0 19.6 93.1" />
@@ -1691,6 +1782,7 @@
 				<button
 					class="dial__item"
 					class:is-on={activeTab === item.id}
+					class:is-aimed={swipeTarget === item.id}
 					style={`--a: ${item.angle}deg; --i: ${index}`}
 					type="button"
 					aria-current={activeTab === item.id}
@@ -1702,7 +1794,7 @@
 				</button>
 			{/each}
 		</div>
-		<button class="dial__fab" type="button" aria-expanded={dialOpen} aria-controls="vault-dial" onclick={() => void toggleDial()}>
+		<button class="dial__fab" type="button" aria-expanded={dialOpen} aria-controls="vault-dial" onclick={onFabClick}>
 			{#if dialOpen}
 				<Icon name="close" size={22} />
 			{:else}
