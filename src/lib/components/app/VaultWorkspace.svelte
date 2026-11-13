@@ -399,6 +399,16 @@
 		angle: 180 - ((index + 0.5) * 180) / sections.length
 	}));
 
+	/** Long lists stay short until asked: five tags, eight history entries. */
+	const TAG_PREVIEW = 5;
+	const HISTORY_PREVIEW = 8;
+
+	let tagsExpanded = false;
+	let historyExpanded = false;
+
+	$: visibleTags = tagsExpanded ? vault.tags : vault.tags.slice(0, TAG_PREVIEW);
+	$: visibleMutations = historyExpanded ? $vaultData.mutations : $vaultData.mutations.slice(0, HISTORY_PREVIEW);
+
 	/** The mark opens the shared settings, so the bar carries one real action. */
 	function openVaultSettings(): void {
 		switchTab('more');
@@ -1650,7 +1660,7 @@
 				{#if morePanel === 'history'}
 					{#if $vaultData.mutations.length}
 						<div class="list">
-							{#each $vaultData.mutations as mutation (mutation.id)}
+							{#each visibleMutations as mutation (mutation.id)}
 								{@const change = mutationAmount(mutation)}
 								<article class="row row--flat">
 									<span class="row__icon" class:row__icon--out={change.direction === 'out'} aria-hidden="true">
@@ -1665,6 +1675,12 @@
 									</span>
 								</article>
 							{/each}
+							{#if $vaultData.mutations.length > HISTORY_PREVIEW}
+								<button class="row row--more" type="button" onclick={() => (historyExpanded = !historyExpanded)}>
+									<span>{historyExpanded ? 'Show fewer' : `Show all ${$vaultData.mutations.length} changes`}</span>
+									<span class="chev" class:is-open={historyExpanded}><Icon name="chevron-right" size={16} /></span>
+								</button>
+							{/if}
 						</div>
 					{:else}
 						<EmptyState icon="history" title="No history yet" message="Every change is logged with who made it and when, so nothing is a mystery later." />
@@ -1730,7 +1746,7 @@
 							<h3 class="group__title">Expense categories</h3>
 							<p class="panel__meta group__hint">{vault.tags.length} tags · shared with {otherName}</p>
 							<div class="panel">
-								{#each vault.tags as tag (tag)}
+								{#each visibleTags as tag (tag)}
 									<div class="tag-row">
 										<span class="tag-row__name">{tag}</span>
 										<button class="tag-row__remove" type="button" aria-label={`Remove ${tag} tag`} disabled={actionBusy} onclick={() => removeCommonTag(tag)}>
@@ -1738,6 +1754,12 @@
 										</button>
 									</div>
 								{/each}
+								{#if vault.tags.length > TAG_PREVIEW}
+									<button class="tag-row tag-row--more" type="button" onclick={() => (tagsExpanded = !tagsExpanded)}>
+										<span class="tag-row__name">{tagsExpanded ? 'Show fewer' : `Show all ${vault.tags.length} tags`}</span>
+										<span class="chev" class:is-open={tagsExpanded}><Icon name="chevron-right" size={16} /></span>
+									</button>
+								{/if}
 								<form class="tag-row tag-row--add" onsubmit={(event) => addCommonTag(event)}>
 									<input class="tag-row__input" bind:value={tagDraft} maxlength="40" placeholder="New tag, e.g. Hosting" aria-label="New spending tag" disabled={actionBusy} />
 									<button class="btn btn--quiet btn--sm" type="submit" disabled={actionBusy || !tagDraft.trim()}>Add</button>

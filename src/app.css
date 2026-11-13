@@ -4342,3 +4342,52 @@ body:has(textarea:focus) .dial {
 	pointer-events: none;
 	transition: opacity 140ms ease, transform 140ms ease;
 }
+
+/* Quiet "show all" row that ends a previewed list. */
+.row--more,
+.tag-row--more {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	width: 100%;
+	border-right: 0;
+	border-bottom: 0;
+	border-left: 0;
+	background: transparent;
+	color: var(--ink-3);
+	font-size: 0.8rem;
+	font-weight: 620;
+	text-align: left;
+	cursor: pointer;
+}
+
+.row--more:hover,
+.tag-row--more:hover {
+	background: var(--surface-2);
+	color: var(--ink);
+}
+
+.tag-row--more .tag-row__name {
+	flex: 1;
+	font-size: 0.8rem;
+	font-weight: 620;
+	color: inherit;
+}
+
+.chev {
+	display: inline-grid;
+	flex: 0 0 auto;
+	place-items: center;
+	color: var(--ink-3);
+	transition: transform 160ms ease;
+}
+
+.chev.is-open {
+	transform: rotate(-90deg);
+}
+
+.row--more:hover .chev,
+.tag-row--more:hover .chev {
+	color: var(--ink);
+}
