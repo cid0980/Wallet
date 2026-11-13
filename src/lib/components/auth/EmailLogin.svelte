@@ -65,7 +65,7 @@
 </script>
 
 <section class="auth" aria-labelledby="login-title">
-	<div class="auth__mark" aria-hidden="true">T</div>
+	<img class="auth__mark" src="/icons/tandem-192.png" alt="" width="46" height="46" />
 	<p class="eyebrow">Tandem</p>
 	<h1 class="h1 auth__title" id="login-title">
 		{mode === 'create'

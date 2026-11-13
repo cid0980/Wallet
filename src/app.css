@@ -1659,17 +1659,12 @@ dialog.sheet::backdrop {
 }
 
 .auth__mark {
-	display: grid;
+	display: block;
 	width: 46px;
 	height: 46px;
-	place-items: center;
 	margin-bottom: 18px;
 	border-radius: 15px;
-	background: linear-gradient(140deg, #0d9488, var(--brand-2));
-	color: #fff;
-	font-size: 1.25rem;
-	font-weight: 850;
-	box-shadow: 0 12px 24px -14px rgb(17 94 89 / 90%);
+	box-shadow: 0 10px 22px -14px rgb(15 23 42 / 45%);
 }
 
 .auth__title {
