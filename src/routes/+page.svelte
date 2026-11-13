@@ -271,7 +271,6 @@
 		name="description"
 		content="A private shared tracker for client payments, spending, and project balances."
 	/>
-	<meta name="theme-color" content="#0b7a44" />
 </svelte:head>
 
 {#if $authState.status === 'signed-in' && $authState.user && currentEmail && $vaultSession.status === 'ready' && $vaultSession.vault && $vaultData.status === 'ready'}

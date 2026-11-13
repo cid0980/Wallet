@@ -29,6 +29,7 @@
 		vaultDataErrorMessage
 	} from '$lib/services/vault-data';
 	import { observeVaultData, vaultData } from '$lib/stores/vault-data';
+	import { resolvedTheme, setThemePref, themePref, type ThemePref } from '$lib/stores/theme';
 	import type {
 		ClientRecord,
 		ExpenseRecord,
@@ -68,6 +69,18 @@
 	type MainTab = 'home' | 'clients' | 'projects' | 'payments' | 'expenses' | 'more';
 	type Composer = 'none' | 'client' | 'project' | 'payment' | 'expense';
 	type MorePanel = 'history' | 'settings';
+
+	const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
+		{ value: 'auto', label: 'Auto' },
+		{ value: 'light', label: 'Light' },
+		{ value: 'dark', label: 'Dark' }
+	];
+
+	/** Spoken under the control, so nobody has to guess what Auto means. */
+	$: themeNote =
+		$themePref === 'auto'
+			? `Following this phone — ${$resolvedTheme} right now.`
+			: `Always ${$themePref} on this phone.`;
 	type DateMode = 'today' | 'yesterday' | 'custom';
 
 	type ChipOption = { value: string; label: string; initial?: string };
@@ -1743,6 +1756,32 @@
 					{/if}
 				{:else}
 					<div class="settings">
+						<section class="group">
+							<h3 class="group__title">Appearance</h3>
+							<div class="panel">
+								<div class="panel__row panel__row--theme">
+									<div class="panel__body">
+										<p class="panel__value">Theme</p>
+										<p class="panel__meta">{themeNote}</p>
+									</div>
+									<div class="seg" role="radiogroup" aria-label="Theme">
+										{#each THEME_OPTIONS as option (option.value)}
+											<button
+												class="seg__item"
+												class:is-on={$themePref === option.value}
+												type="button"
+												role="radio"
+												aria-checked={$themePref === option.value}
+												onclick={() => setThemePref(option.value)}
+											>
+												{option.label}
+											</button>
+										{/each}
+									</div>
+								</div>
+							</div>
+						</section>
+
 						<section class="group">
 							<h3 class="group__title">Vault</h3>
 							<div class="panel">

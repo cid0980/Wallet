@@ -3,8 +3,30 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<meta name="color-scheme" content="light" />
-		<meta name="theme-color" content="#0b7a44" />
+		<meta name="color-scheme" content="light dark" />
+		<!--
+			No brand colour here on purpose: the status bar and the navigation bar
+			should read as the app itself, so the value always equals the page
+			background. The script below and $lib/stores/theme keep it in step with
+			the light/dark choice.
+		-->
+		<meta name="theme-color" content="#f5f7f6" />
+		<script>
+			// Runs before first paint so a dark phone never flashes white.
+			try {
+				var pref = localStorage.getItem('vault.theme') || 'auto';
+				var dark =
+					pref === 'dark' ||
+					(pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+				var root = document.documentElement;
+				root.dataset.theme = dark ? 'dark' : 'light';
+				root.style.colorScheme = dark ? 'dark' : 'light';
+				var chrome = document.querySelector('meta[name="theme-color"]');
+				if (chrome) chrome.setAttribute('content', dark ? '#0e1210' : '#f5f7f6');
+			} catch (error) {
+				/* a browser without storage just gets the light default */
+			}
+		</script>
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="default" />

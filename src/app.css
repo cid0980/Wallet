@@ -2,8 +2,9 @@
  * Vault — one design system for every device.
  *
  * Deliberate rules:
- *  - One theme. No `prefers-color-scheme` switching, so two people on two
- *    phones always see the same screen.
+ *  - Two themes, one design: light and dark are the same tokens with different
+ *    values, so nothing is styled twice. The choice lives on the device
+ *    (More → Settings → Appearance) and defaults to following the phone.
  *  - No OS-native widgets standing in for the interface (no <select> popups,
  *    no window.confirm, no checkbox-as-a-control). Everything is drawn by the
  *    app itself, so iOS, Android, Windows and macOS look alike.
@@ -58,8 +59,89 @@
 	--sh-2: 0 24px 60px -32px rgb(16 33 26 / 32%);
 	--focus: 0 0 0 3px rgb(11 122 68 / 24%);
 
+	/* Surfaces that sit on top of other surfaces, and the few places where a
+	   colour cannot be a brand tint (hover wash, success toast, the fab). */
+	--btn-hover: #e9eeeb;
+	--ok-bg: #f3fbf6;
+	--ok-line: #b7e3c9;
+	--ok-ink: #14532f;
+	--ok-ink-2: #406952;
+	--spinner-track: #d3e7dc;
+	--skeleton-hi: #e9efeb;
+	--danger-icon-bg: #f8d9d1;
+	--avatar-b-bg: #e8eaff;
+	--avatar-b-ink: #454b9e;
+	--fab-bg: #1b2620;
+	--fab-open-bg: #46574e;
+	--fab-ink: #ffffff;
+	--glow-a: rgb(38 168 100 / 12%);
+	--glow-b: rgb(11 122 68 / 10%);
+	--chip-ring: rgb(11 122 68 / 35%);
+	--seg-ring: rgb(11 122 68 / 30%);
+	--brand-ring: rgb(11 122 68 / 45%);
+
 	--nav-h: 56px;
 	--gutter: 14px;
+}
+
+/*
+ * Dark is the same palette read at night: the page sinks to near-black, cards
+ * lift one step instead of being pure white, and the brand green brightens only
+ * where it is ink. Buttons keep a deep green so white labels stay legible.
+ */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	--bg: #0e1210;
+	--surface: #171c19;
+	--surface-2: #1b201d;
+	--surface-3: #212724;
+
+	--ink: #edf2ee;
+	--ink-2: #bfcac3;
+	--ink-3: #8d9a93;
+	--line: #29302c;
+	--line-2: #39423c;
+
+	--brand: #0d8146;
+	--brand-2: #0a6b3c;
+	--brand-soft: #12291d;
+	--brand-ink: #5cd598;
+
+	--in: #4cd396;
+	--in-soft: #10301f;
+	--out: #ef8d75;
+	--out-soft: #2c1712;
+
+	--danger: #ff9a83;
+	--danger-soft: #2c1714;
+	--danger-line: #4c2820;
+	--warn: #e5bf78;
+	--warn-soft: #2a2213;
+	--warn-line: #4a3a1c;
+
+	--sh-1: none;
+	--sh-2: 0 24px 60px -32px rgb(0 0 0 / 72%);
+	--focus: 0 0 0 3px rgb(92 213 152 / 30%);
+
+	--btn-hover: #242b27;
+	--ok-bg: #10241a;
+	--ok-line: #2b4a38;
+	--ok-ink: #7fe0ac;
+	--ok-ink-2: #5cb98a;
+	--spinner-track: #2c3a33;
+	--skeleton-hi: #262d29;
+	--danger-icon-bg: #3a1d18;
+	--avatar-b-bg: #232a45;
+	--avatar-b-ink: #b6bff6;
+	--fab-bg: #2b332e;
+	--fab-open-bg: #3c463f;
+	--fab-ink: #edf2ee;
+	--glow-a: rgb(30 150 92 / 16%);
+	--glow-b: rgb(20 110 70 / 14%);
+	--chip-ring: rgb(92 213 152 / 38%);
+	--seg-ring: rgb(92 213 152 / 34%);
+	--brand-ring: rgb(92 213 152 / 55%);
 }
 
 *,
@@ -77,8 +159,8 @@ body {
 	min-width: 320px;
 	margin: 0;
 	background:
-		radial-gradient(52rem 30rem at 8% -8%, rgb(38 168 100 / 12%), transparent 70%),
-		radial-gradient(40rem 26rem at 104% 104%, rgb(11 122 68 / 10%), transparent 70%),
+		radial-gradient(52rem 30rem at 8% -8%, var(--glow-a), transparent 70%),
+		radial-gradient(40rem 26rem at 104% 104%, var(--glow-b), transparent 70%),
 		var(--bg);
 	color: var(--ink);
 	font-family:
@@ -87,6 +169,7 @@ body {
 	font-size: 16px;
 	line-height: 1.5;
 	-webkit-font-smoothing: antialiased;
+	transition: background-color 200ms ease, color 200ms ease;
 }
 
 h1,
@@ -404,8 +487,8 @@ main:focus {
 }
 
 .avatar--b {
-	background: #e8eaff;
-	color: #454b9e;
+	background: var(--avatar-b-bg);
+	color: var(--avatar-b-ink);
 }
 
 /* ---------------------------------------------------------------- forms */
@@ -601,7 +684,7 @@ main:focus {
 .chip--on {
 	border-color: transparent;
 	background: var(--brand-soft);
-	box-shadow: inset 0 0 0 1.5px rgb(11 122 68 / 35%);
+	box-shadow: inset 0 0 0 1.5px var(--chip-ring);
 	color: var(--brand-ink);
 }
 
@@ -629,6 +712,53 @@ main:focus {
 .chip[disabled] {
 	cursor: not-allowed;
 	opacity: 0.55;
+}
+
+/* A three-way choice that belongs to the device, not to the vault (theme). */
+.seg {
+	display: flex;
+	width: 100%;
+	max-width: 340px;
+	gap: 2px;
+	border: 1px solid var(--line);
+	border-radius: var(--r-md);
+	padding: 3px;
+	background: var(--surface-3);
+}
+
+.seg__item {
+	flex: 1 1 0;
+	border: 0;
+	border-radius: 7px;
+	padding: 7px 6px;
+	background: transparent;
+	color: var(--ink-2);
+	font-size: 0.79rem;
+	font-weight: 750;
+	letter-spacing: -0.01em;
+	cursor: pointer;
+	transition: background-color 140ms ease, color 140ms ease;
+}
+
+.seg__item:hover {
+	color: var(--ink);
+}
+
+.seg__item.is-on {
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1.5px var(--seg-ring);
+	color: var(--brand-ink);
+}
+
+.seg__item:active {
+	transform: translateY(1px);
+}
+
+.seg__note {
+	margin-top: 7px;
+	color: var(--ink-3);
+	font-size: 0.74rem;
+	line-height: 1.4;
 }
 
 /* ------------------------------------------------------- tabs (all sizes) */
@@ -1268,9 +1398,9 @@ main:focus {
 }
 
 .toast--ok {
-	border-color: #b7e3c9;
-	background: #f3fbf6;
-	color: #14532f;
+	border-color: var(--ok-line);
+	background: var(--ok-bg);
+	color: var(--ok-ink);
 }
 
 .toast--error {
@@ -1291,7 +1421,7 @@ main:focus {
 }
 
 .toast--error .toast__icon {
-	background: #f8d9d1;
+	background: var(--danger-icon-bg);
 	color: var(--danger);
 }
 
@@ -1427,7 +1557,7 @@ dialog.sheet::backdrop {
 .spinner {
 	width: 30px;
 	height: 30px;
-	border: 3px solid #d3e7dc;
+	border: 3px solid var(--spinner-track);
 	border-top-color: var(--brand);
 	border-radius: 50%;
 	animation: spin 800ms linear infinite;
@@ -1465,7 +1595,7 @@ dialog.sheet::backdrop {
 .skeleton {
 	display: block;
 	border-radius: var(--r-sm);
-	background: linear-gradient(90deg, var(--surface-3) 25%, #e9efeb 37%, var(--surface-3) 63%);
+	background: linear-gradient(90deg, var(--surface-3) 25%, var(--skeleton-hi) 37%, var(--surface-3) 63%);
 	background-size: 400% 100%;
 	animation: skeleton-sweep 1400ms ease-in-out infinite;
 }
@@ -1706,11 +1836,11 @@ details.raw pre {
 	gap: 14px;
 	margin: 0 auto;
 	padding: 14px 15px;
-	border: 1px solid #b7e3c9;
+	border: 1px solid var(--ok-line);
 	border-radius: var(--r-lg);
-	background: #f3fbf6;
+	background: var(--ok-bg);
 	box-shadow: var(--sh-2);
-	color: #14532f;
+	color: var(--ok-ink);
 }
 
 .pwa strong {
@@ -1720,7 +1850,7 @@ details.raw pre {
 
 .pwa p {
 	margin-top: 3px;
-	color: #406952;
+	color: var(--ok-ink-2);
 	font-size: 0.76rem;
 	line-height: 1.4;
 }
@@ -2459,7 +2589,7 @@ body {
 }
 
 .btn:hover {
-	background: #e9eeeb;
+	background: var(--btn-hover);
 }
 
 .btn:active {
@@ -3882,8 +4012,8 @@ body {
 		place-items: center;
 		border: 1px solid rgb(255 255 255 / 14%);
 		border-radius: 50%;
-		background: var(--ink);
-		color: #fff;
+		background: var(--fab-bg);
+		color: var(--fab-ink);
 		box-shadow: 0 14px 28px -16px rgb(9 26 17 / 80%);
 		pointer-events: auto;
 		transition: transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1.05), background 140ms ease;
@@ -3894,7 +4024,7 @@ body {
 	}
 
 	.dial.is-open .dial__fab {
-		background: var(--ink-2);
+		background: var(--fab-open-bg);
 	}
 }
 
@@ -4080,6 +4210,27 @@ body {
 
 .panel__row--stack {
 	align-items: flex-start;
+}
+
+/* In dark the ink ring would be a white outline: use the brand instead. */
+:root[data-theme='dark'] .chip--on {
+	border-color: transparent;
+	background: var(--brand-soft);
+	box-shadow: inset 0 0 0 1.5px var(--brand-ring);
+	color: var(--brand-ink);
+}
+
+:root[data-theme='dark'] .chip--on .chip__dot {
+	background: var(--brand-ring);
+	color: var(--surface);
+}
+
+/* Label on top, control across the row — the label must never be squeezed.
+   Declared after .panel__row so its flex layout does not win on source order. */
+.panel__row--theme {
+	display: grid;
+	gap: 10px;
+	align-items: stretch;
 }
 
 .panel__body {

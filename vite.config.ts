@@ -18,8 +18,10 @@ export default defineConfig({
 				id: '/',
 				start_url: '/',
 				display: 'standalone',
-				background_color: '#f3f7f4',
-				theme_color: '#08743b',
+				// Both match the page background: the installed app should not put a
+				// green bar above and below its own screen.
+				background_color: '#f5f7f6',
+				theme_color: '#f5f7f6',
 				icons: [
 					{
 						src: '/icons/vault-192.png',
