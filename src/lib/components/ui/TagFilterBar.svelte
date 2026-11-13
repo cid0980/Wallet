@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Icon from './Icon.svelte';
 	import { formatPaise } from '$lib/utils/money';
-	import { rangeLabel, type RangePreset } from '$lib/utils/tag-filter';
+	import type { RangePreset } from '$lib/utils/tag-filter';
+	import { formatDateKey } from '$lib/utils/dates';
 
 	interface TagFilterShape {
 		tag: string | null;
@@ -56,6 +56,17 @@
 	}: Props = $props();
 
 	const isFiltered = $derived(filter.tag !== null || filter.preset !== 'month');
+
+	/** "1 – 13 Nov 2026" reads better than two ISO keys. */
+	const readableRange = $derived(
+		!filter.from && !filter.to
+			? 'All time'
+			: !filter.from
+				? `Up to ${formatDateKey(filter.to)}`
+				: !filter.to
+					? `From ${formatDateKey(filter.from)}`
+					: `${formatDateKey(filter.from)} – ${formatDateKey(filter.to)}`
+	);
 	const countLabel = $derived(`${summary.count} ${unitLabel}${summary.count === 1 ? '' : 's'}`);
 </script>
 
@@ -68,7 +79,7 @@
 	</div>
 
 	{#if tags.length}
-		<div class="chips" role="group" aria-label="Filter by tag">
+		<div class="chips chips--row" role="group" aria-label="Filter by tag">
 			<button
 				class="chip"
 				class:chip--on={filter.tag === null}
@@ -88,7 +99,7 @@
 					{disabled}
 					onclick={() => onTag(tag)}
 				>
-					<Icon name="tag" size={14} /> {tag}
+					{tag}
 				</button>
 			{/each}
 		</div>
@@ -96,7 +107,7 @@
 		<p class="hint">No tags yet — add one while recording, and it appears here.</p>
 	{/if}
 
-	<div class="chips" role="group" aria-label="Filter by date">
+	<div class="chips chips--row" role="group" aria-label="Filter by date">
 		{#each presets as preset (preset.value)}
 			<button
 				class="chip chip--soft"
@@ -145,11 +156,11 @@
 		</p>
 		<p class="tag-sum__total num">{formatPaise(summary.totalPaise)}</p>
 		<p class="tag-sum__meta">
-			{countLabel} · {rangeLabel({ from: filter.from, to: filter.to })}
+			{countLabel} · {readableRange}
 		</p>
 		<div class="tag-sum__split">
-			<span><span class="dot--a" aria-hidden="true"></span>{partnerAName} <strong class="num">{formatPaise(summary.aPaise)}</strong></span>
-			<span><span class="dot--b" aria-hidden="true"></span>{partnerBName} <strong class="num">{formatPaise(summary.bPaise)}</strong></span>
+			<span>{partnerAName} <strong class="num">{formatPaise(summary.aPaise)}</strong></span>
+			<span>{partnerBName} <strong class="num">{formatPaise(summary.bPaise)}</strong></span>
 		</div>
 	</div>
 </section>
@@ -237,23 +248,28 @@
 		font-weight: 600;
 	}
 
-	.dot--a,
-	.dot--b {
-		display: inline-block;
-		width: 8px;
-		height: 8px;
-		margin-right: 6px;
-		border-radius: 50%;
-		background: var(--brand);
+	/* One scrollable strip per group keeps the filter compact on a phone. */
+	.chips--row {
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		scrollbar-width: none;
+		margin: 0;
+		padding: 0;
 	}
 
-	/* Date presets read as a secondary control next to the tag chips. */
-	.chip--soft {
-		background: var(--surface-3);
-		color: var(--ink-2);
+	.chips--row::-webkit-scrollbar {
+		display: none;
 	}
 
-	.dot--b {
-		background: var(--out);
+	.chips--row > * {
+		flex: 0 0 auto;
+	}
+
+	/* Wide screens have room to wrap instead of scrolling. */
+	@media (min-width: 1024px) {
+		.chips--row {
+			flex-wrap: wrap;
+			overflow: visible;
+		}
 	}
 </style>

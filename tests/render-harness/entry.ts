@@ -188,7 +188,7 @@ const scenarios: Scenario[] = [
 		auth: { status: 'signed-in', user, email: user.email, error: null },
 		session: { status: 'ready', vault },
 		data: busyData,
-		expect: 'received of'
+		expect: ' of ₹'
 	},
 	{
 		name: 'partial project payments show the amount left',
@@ -219,7 +219,7 @@ const scenarios: Scenario[] = [
 		auth: { status: 'signed-in', user, email: user.email, error: null },
 		session: { status: 'ready', vault },
 		data: busyData,
-		expect: 'two@example.com'
+		expect: 'Updated'
 	},
 	{
 		name: 'empty projects invite the first one',

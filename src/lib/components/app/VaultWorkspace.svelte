@@ -244,6 +244,29 @@
 	);
 	$: paymentSummary = summarizeRecords(filteredPayments);
 	$: expenseSummary = summarizeRecords(filteredExpenses);
+	// Estimated value of the work still open, and how much of it has landed.
+	$: projectsSummary = activeProjects.reduce(
+		(acc, project) => {
+			const paid = paidByProject[project.id] ?? 0;
+			acc.estimatedPaise += project.estimatedPaise;
+			acc.paidPaise += Math.min(paid, project.estimatedPaise);
+			acc.outstandingPaise += Math.max(0, project.estimatedPaise - paid);
+			return acc;
+		},
+		{ estimatedPaise: 0, paidPaise: 0, outstandingPaise: 0 }
+	);
+	/** History reads better with a person's name than a raw address. */
+	function actorLabel(email: string): string {
+		if (email === vault.members.a.email) return vault.members.a.name;
+		if (email === vault.members.b.email) return vault.members.b.name;
+		return email;
+	}
+
+	/** The amount sits in its own column, so drop it from the summary text. */
+	function summaryText(summary: string): string {
+		return summary.replace(/₹[\d.,]+\s*/g, '').replace(/\s{2,}/g, ' ').trim();
+	}
+
 	$: paymentFilterActive = paymentFilter.tag !== null || paymentFilter.preset !== 'month' || Boolean(paymentProjectFilter);
 	$: expenseFilterActive = expenseFilter.tag !== null || expenseFilter.preset !== 'month';
 	$: filteredProjects = needle
@@ -924,72 +947,79 @@
 
 <div class="shell">
 	<a class="skip-link" href="#vault-main">Skip to content</a>
-	<header class="app-head">
-		<div class="app-head__brand">
-			<span class="app-head__logo" aria-hidden="true">{vault.name.trim().slice(0, 1).toUpperCase() || 'V'}</span>
-			<div>
-				<p class="eyebrow">Shared vault</p>
-				<p class="app-head__vault">{vault.name}</p>
+
+	<aside class="sidenav">
+		<div class="sidenav__top">
+			<div class="sidenav__brand">
+				<span class="sidenav__logo" aria-hidden="true">{vault.name.trim().slice(0, 1).toUpperCase() || 'V'}</span>
+				<span class="sidenav__id">
+					<span class="sidenav__name">{vault.name}</span>
+					<span class="sidenav__meta">Shared with {otherName}</span>
+				</span>
+			</div>
+			<div class="sidenav__actions">
+				{#if isOffline}
+					<span class="status status--offline" role="status"><span class="status__dot" aria-hidden="true"></span>Offline</span>
+				{:else if isSyncing}
+					<span class="status" role="status"><span class="status__dot" aria-hidden="true"></span>Saving</span>
+				{:else}
+					<span class="status status--live" role="status"><span class="status__dot" aria-hidden="true"></span>Synced</span>
+				{/if}
+				<button
+					class="avatar"
+					class:avatar--b={ownPartner === 'b'}
+					type="button"
+					aria-label="Open vault settings"
+					onclick={() => {
+						switchTab('more');
+						morePanel = 'settings';
+					}}
+				>
+					{ownInitial}
+				</button>
 			</div>
 		</div>
-		<div class="app-head__side">
-			{#if isOffline}
-				<span class="status status--offline" role="status"><span class="status__dot" aria-hidden="true"></span>Offline</span>
-			{:else if isSyncing}
-				<span class="status" role="status"><span class="status__dot" aria-hidden="true"></span>Saving</span>
-			{:else}
-				<span class="status status--live" role="status"><span class="status__dot" aria-hidden="true"></span>Synced</span>
-			{/if}
-			<button
-				class="avatar"
-				class:avatar--b={ownPartner === 'b'}
-				type="button"
-				aria-label="Open vault settings"
-				onclick={() => {
-					switchTab('more');
-					morePanel = 'settings';
-				}}
-			>
-				{ownInitial}
+
+		<nav class="tabs" aria-label="Vault sections">
+			<button class="tab" class:tab--on={activeTab === 'home'} type="button" aria-current={activeTab === 'home'} onclick={() => switchTab('home')}>
+				<Icon name="home" size={17} />
+				<span class="tab__label">Home</span>
 			</button>
-		</div>
-	</header>
+			<button class="tab" class:tab--on={activeTab === 'projects'} type="button" aria-current={activeTab === 'projects'} onclick={() => switchTab('projects')}>
+				<Icon name="target" size={17} />
+				<span class="tab__label">Projects</span>
+			</button>
+			<button class="tab" class:tab--on={activeTab === 'clients'} type="button" aria-current={activeTab === 'clients'} onclick={() => switchTab('clients')}>
+				<Icon name="clients" size={17} />
+				<span class="tab__label">Clients</span>
+			</button>
+			<button class="tab" class:tab--on={activeTab === 'payments'} type="button" aria-current={activeTab === 'payments'} onclick={() => switchTab('payments')}>
+				<Icon name="money-in" size={17} />
+				<span class="tab__label">Payments</span>
+			</button>
+			<button class="tab" class:tab--on={activeTab === 'expenses'} type="button" aria-current={activeTab === 'expenses'} onclick={() => switchTab('expenses')}>
+				<Icon name="money-out" size={17} />
+				<span class="tab__label">Expenses</span>
+			</button>
+			<button class="tab" class:tab--on={activeTab === 'more'} type="button" aria-current={activeTab === 'more'} onclick={() => switchTab('more')}>
+				<Icon name="more" size={17} />
+				<span class="tab__label">More</span>
+			</button>
+		</nav>
+	</aside>
 
-	<nav class="tabs" aria-label="Vault sections">
-		<button class="tab" class:tab--on={activeTab === 'home'} type="button" aria-current={activeTab === 'home'} onclick={() => switchTab('home')}>
-			<Icon name="home" size={21} />
-			<span class="tab__label">Home</span>
-		</button>
-		<button class="tab" class:tab--on={activeTab === 'projects'} type="button" aria-current={activeTab === 'projects'} onclick={() => switchTab('projects')}>
-			<Icon name="target" size={19} />
-			<span class="tab__label">Projects</span>
-		</button>
-		<button class="tab" class:tab--on={activeTab === 'clients'} type="button" aria-current={activeTab === 'clients'} onclick={() => switchTab('clients')}>
-			<Icon name="clients" size={21} />
-			<span class="tab__label">Clients</span>
-		</button>
-		<button class="tab" class:tab--on={activeTab === 'payments'} type="button" aria-current={activeTab === 'payments'} onclick={() => switchTab('payments')}>
-			<Icon name="money-in" size={21} />
-			<span class="tab__label">Payments</span>
-		</button>
-		<button class="tab" class:tab--on={activeTab === 'expenses'} type="button" aria-current={activeTab === 'expenses'} onclick={() => switchTab('expenses')}>
-			<Icon name="money-out" size={21} />
-			<span class="tab__label">Expenses</span>
-		</button>
-		<button class="tab" class:tab--on={activeTab === 'more'} type="button" aria-current={activeTab === 'more'} onclick={() => switchTab('more')}>
-			<Icon name="more" size={21} />
-			<span class="tab__label">More</span>
-		</button>
-	</nav>
-
+	<div class="shell__content">
 	<main id="vault-main" tabindex="-1">
 		{#if activeTab === 'home'}
-			<section class="between">
-				<div class="section__title">
-					<p class="eyebrow">Shared with {otherName}</p>
-					<h2 class="h1">Hi {ownFirst}.</h2>
+			<div class="view">
+				<div class="view__head">
+					<div class="view__titles">
+						<h2 class="h1">Hi {ownFirst}.</h2>
+						<p class="view__sub">Shared with {otherName} · {activeProjects.length} project{activeProjects.length === 1 ? '' : 's'} in progress</p>
+					</div>
 				</div>
-			</section>
+				<div class="view__cols">
+					<div class="view__aside">
 
 			<section class="hero" class:hero--negative={balance < 0}>
 				<p class="hero__label">Available balance</p>
@@ -1008,10 +1038,8 @@
 			</section>
 
 			<section class="quick" aria-label="Add something new">
-				<button class="quick__primary" type="button" onclick={() => openPaymentComposer()}>
-					<span class="quick__icon" aria-hidden="true"><Icon name="money-in" size={21} /></span>
-					<span class="quick__text"><strong>Record a payment</strong><small>Money received for your work</small></span>
-					<Icon name="arrow-right" size={19} />
+				<button class="btn btn--primary btn--block" type="button" onclick={() => openPaymentComposer()}>
+					<Icon name="money-in" size={17} /> Record a payment
 				</button>
 				<div class="quick__row">
 					<button class="quick__btn" type="button" onclick={() => openExpenseComposer()}>
@@ -1029,10 +1057,13 @@
 				</div>
 			</section>
 
+
+				</div>
+
+					<div class="view__main">
 			<section class="section">
 				<div class="section__head">
 					<div class="section__title">
-						<p class="eyebrow">Work in progress</p>
 						<h2 class="h2">Your projects</h2>
 					</div>
 					{#if $vaultData.projects.length}
@@ -1046,17 +1077,19 @@
 							{@const paid = paidByProject[project.id] ?? 0}
 							{@const pay = projectPaymentStatus(project.estimatedPaise, paid)}
 							<article class="row row--flat">
-								<span class="row__icon" class:row__icon--in={pay.covered} aria-hidden="true"><Icon name="target" size={19} /></span>
 								<div class="row__body">
 									<p class="row__title">{project.name}</p>
 									<p class="row__meta">{project.clientName}</p>
 									<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
-									<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
-									{#if pay.remainingPaise > 0}
-										<p class="project-remaining num">{formatPaise(pay.remainingPaise)} still to collect</p>
-									{:else if pay.excessPaise > 0}
-										<p class="project-remaining num">{formatPaise(pay.excessPaise)} above the estimate</p>
-									{/if}
+									<div class="row__figures">
+										<span class="num">{formatPaise(paid)} of {formatPaise(project.estimatedPaise)}</span>
+										{#if pay.remainingPaise > 0}
+											<span class="num project-remaining">{formatPaise(pay.remainingPaise)} still to collect</span>
+										{:else if pay.excessPaise > 0}
+											<span class="num project-remaining">{formatPaise(pay.excessPaise)} above the estimate</span>
+										{/if}
+									</div>
+									<p class="tiny">Updated {formatDateTime(project.updatedAt)} · {actorLabel(project.updatedBy)}</p>
 								</div>
 								<div class="row__side">
 									<span class="badge" class:badge--in={pay.covered}>{paymentStateLabel(pay.state)}</span>
@@ -1074,8 +1107,7 @@
 			<section class="section">
 				<div class="section__head">
 					<div class="section__title">
-						<p class="eyebrow">Who handled what</p>
-						<h2 class="h2">Split by partner</h2>
+								<h2 class="h2">Split by partner</h2>
 					</div>
 				</div>
 				<div class="split">
@@ -1102,7 +1134,6 @@
 			<section class="section">
 				<div class="section__head">
 					<div class="section__title">
-						<p class="eyebrow">Recent activity</p>
 						<h2 class="h2">Latest changes</h2>
 					</div>
 					{#if $vaultData.mutations.length}
@@ -1119,8 +1150,8 @@
 									<Icon name={mutationIcon(mutation)} size={19} />
 								</span>
 								<div class="row__body">
-									<p class="row__title">{mutation.summary}</p>
-									<p class="row__meta">{mutation.actorEmail} · {formatDateTime(mutation.createdAt)}</p>
+									<p class="row__title">{summaryText(mutation.summary)}</p>
+									<p class="row__meta">{actorLabel(mutation.actorEmail)} · {formatDateTime(mutation.createdAt)}</p>
 								</div>
 								<span class="row__amount num" class:row__amount--in={change.direction === 'in'} class:row__amount--out={change.direction === 'out'}>
 									{change.direction === 'out' ? '−' : '+'}{formatPaise(change.amount)}
@@ -1132,21 +1163,29 @@
 					<EmptyState icon="history" title="Nothing recorded yet" message="Every payment and expense you add shows up here, so you both always know what changed."><button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record the first payment</button></EmptyState>
 				{/if}
 			</section>
-		{:else if activeTab === 'clients'}
-			<section class="section__head">
-				<div class="section__title">
-					<p class="eyebrow">Client list</p>
-					<h2 class="h1">Clients</h2>
-					<p class="lead">Payments are linked to a client, so income stays traceable.</p>
+					</div>
 				</div>
-				<button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>
-					<Icon name="plus" size={17} /> Add
-				</button>
-			</section>
-
-			<div class="between">
-				<ChipGroup label="Which clients to show" options={[{ value: 'active', label: `Active · ${activeClients.length}` }, { value: 'all', label: `All · ${$vaultData.clients.length}` }]} value={clientFilter} onChange={(value) => (clientFilter = value as 'active' | 'all')} />
 			</div>
+		{:else if activeTab === 'clients'}
+			<div class="view">
+				<div class="view__head">
+					<div class="view__titles">
+						<h2 class="h1">Clients</h2>
+						<p class="view__sub">{activeClients.length} active · {$vaultData.clients.length} total</p>
+					</div>
+					<button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>
+						<Icon name="plus" size={16} /> Add
+					</button>
+				</div>
+
+				<div class="view__cols">
+					<div class="view__aside">
+						<div class="rail-card">
+							<p class="rail-card__label">Showing</p>
+							<ChipGroup label="Which clients to show" options={[{ value: 'active', label: `Active · ${activeClients.length}` }, { value: 'all', label: `All · ${$vaultData.clients.length}` }]} value={clientFilter} onChange={(value) => (clientFilter = value as 'active' | 'all')} />
+						</div>
+					</div>
+					<div class="view__main">
 
 			{#if $vaultData.clients.length > 4}
 				<label class="search mt-14">
@@ -1186,17 +1225,34 @@
 					<EmptyState icon="clients" title="No clients yet" message="Add the people or companies who pay you. You can record a payment as soon as one exists."><button class="btn btn--primary btn--sm" type="button" onclick={() => openClientComposer()}>Add your first client</button></EmptyState>
 				{/if}
 			</section>
-		{:else if activeTab === 'projects'}
-			<section class="section__head">
-				<div class="section__title">
-					<p class="eyebrow">Projects</p>
-					<h2 class="h1">Projects</h2>
-					<p class="lead">Each project has an estimated price. Payments against it show what is still to collect; marking the work done is separate, and yours to decide.</p>
+					</div>
 				</div>
-				<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>
-					<Icon name="plus" size={17} /> Add
-				</button>
-			</section>
+			</div>
+		{:else if activeTab === 'projects'}
+			<div class="view">
+				<div class="view__head">
+					<div class="view__titles">
+						<h2 class="h1">Projects</h2>
+						<p class="view__sub">{activeProjects.length} in progress · {formatPaise(projectsSummary.outstandingPaise)} still to collect</p>
+					</div>
+					<button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>
+						<Icon name="plus" size={16} /> Add
+					</button>
+				</div>
+
+				<div class="view__cols">
+					<div class="view__aside">
+						<div class="summary">
+							<p class="summary__label">Active work</p>
+							<p class="summary__value num">{formatPaise(projectsSummary.estimatedPaise)}</p>
+							<dl class="summary__rows">
+								<div><dt>Received</dt><dd class="num">{formatPaise(projectsSummary.paidPaise)}</dd></div>
+								<div><dt>Still to collect</dt><dd class="num">{formatPaise(projectsSummary.outstandingPaise)}</dd></div>
+							</dl>
+						</div>
+						<p class="hint">An estimate is not income. “Fully paid” appears once payments reach it.</p>
+					</div>
+					<div class="view__main">
 
 			{#if $vaultData.projects.length > 4}
 				<label class="search mt-14">
@@ -1212,17 +1268,18 @@
 						{@const paymentCount = $vaultData.payments.filter((payment) => payment.projectId === project.id).length}
 						{@const pay = projectPaymentStatus(project.estimatedPaise, paid)}
 						<article class="row">
-							<span class="row__icon" class:row__icon--in={pay.covered} aria-hidden="true"><Icon name="target" size={19} /></span>
 							<div class="row__body">
 								<p class="row__title">{project.name}</p>
-								<p class="row__meta">{project.clientName} · estimated {formatPaise(project.estimatedPaise)}</p>
+								<p class="row__meta">{project.clientName}</p>
 								<Progress value={paid} max={project.estimatedPaise} label={`${formatPaise(paid)} received of ${formatPaise(project.estimatedPaise)}`} />
-								<p class="tiny num">{formatPaise(paid)} received of {formatPaise(project.estimatedPaise)}</p>
-								{#if pay.remainingPaise > 0}
-									<p class="project-remaining num">{formatPaise(pay.remainingPaise)} still to collect</p>
-								{:else if pay.excessPaise > 0}
-									<p class="project-remaining num">{formatPaise(pay.excessPaise)} above the estimate</p>
-								{/if}
+								<div class="row__figures">
+									<span class="num">{formatPaise(paid)} of {formatPaise(project.estimatedPaise)}</span>
+									{#if pay.remainingPaise > 0}
+										<span class="num project-remaining">{formatPaise(pay.remainingPaise)} still to collect</span>
+									{:else if pay.excessPaise > 0}
+										<span class="num project-remaining">{formatPaise(pay.excessPaise)} above the estimate</span>
+									{/if}
+								</div>
 								<div class="project-actions">
 									{#if !pay.covered}
 										<button class="btn btn--outline btn--sm" type="button" onclick={() => openPaymentComposer(null, project)}><Icon name="plus" size={16} /> Add payment</button>
@@ -1235,7 +1292,7 @@
 									</button>
 								</div>
 								{#if project.note}<p class="row__note">{project.note}</p>{/if}
-								<p class="tiny">Last edited by {project.updatedBy} · {formatDateTime(project.updatedAt)}</p>
+								<p class="tiny">Updated {formatDateTime(project.updatedAt)} · {actorLabel(project.updatedBy)}</p>
 							</div>
 							<div class="row__side">
 								<span class="badge" class:badge--in={pay.covered}>{paymentStateLabel(pay.state)}</span>
@@ -1259,20 +1316,23 @@
 			{:else}
 				<EmptyState icon="target" title="No projects yet" message="One client can carry several projects. Give each one an estimated price and track payments against it."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add your first project</button></EmptyState>
 			{/if}
-		{:else if activeTab === 'payments'}
-			<section class="section__head">
-				<div class="section__title">
-					<p class="eyebrow">Money in</p>
-					<h2 class="h1">Payments</h2>
-					<p class="lead">
-						{formatPaise(vault.totals.earned)} received across {$vaultData.payments.length} payment{$vaultData.payments.length === 1 ? '' : 's'}.
-					</p>
+					</div>
 				</div>
-				<button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>
-					<Icon name="plus" size={17} /> Add
-				</button>
-			</section>
+			</div>
+		{:else if activeTab === 'payments'}
+			<div class="view">
+				<div class="view__head">
+					<div class="view__titles">
+						<h2 class="h1">Payments</h2>
+						<p class="view__sub">{formatPaise(vault.totals.earned)} received across {$vaultData.payments.length} payment{$vaultData.payments.length === 1 ? '' : 's'}</p>
+					</div>
+					<button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>
+						<Icon name="plus" size={16} /> Add
+					</button>
+				</div>
 
+				<div class="view__cols">
+					<div class="view__aside">
 			{#if $vaultData.payments.length}
 				<TagFilterBar
 					label="Filter payments"
@@ -1299,9 +1359,11 @@
 				</div>
 			{/if}
 
+					</div>
+					<div class="view__main">
 			{#if $vaultData.payments.length > 4}
-				<label class="search mt-14">
-					<Icon name="search" size={18} />
+				<label class="search">
+					<Icon name="search" size={16} />
 					<input bind:value={query} type="search" placeholder="Search payments" aria-label="Search payments" />
 				</label>
 			{/if}
@@ -1317,7 +1379,6 @@
 				<div class="list">
 					{#each filteredPayments as payment (payment.id)}
 						<article class="row">
-							<span class="row__icon" aria-hidden="true"><Icon name="money-in" size={19} /></span>
 							<div class="row__body">
 								<p class="row__title">{payment.clientName}</p>
 								<p class="row__meta">
@@ -1359,20 +1420,23 @@
 			{:else}
 				<EmptyState icon="money-in" title="No payments recorded" message="Record what a client paid, and the shared balance updates for both of you instantly."><button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record payment</button></EmptyState>
 			{/if}
-		{:else if activeTab === 'expenses'}
-			<section class="section__head">
-				<div class="section__title">
-					<p class="eyebrow">Money out</p>
-					<h2 class="h1">Expenses</h2>
-					<p class="lead">
-						{formatPaise(vault.totals.spent)} tracked across {$vaultData.expenses.length} expense{$vaultData.expenses.length === 1 ? '' : 's'}.
-					</p>
+					</div>
 				</div>
-				<button class="btn btn--primary btn--sm" type="button" onclick={() => openExpenseComposer()}>
-					<Icon name="plus" size={17} /> Add
-				</button>
-			</section>
+			</div>
+		{:else if activeTab === 'expenses'}
+			<div class="view">
+				<div class="view__head">
+					<div class="view__titles">
+						<h2 class="h1">Expenses</h2>
+						<p class="view__sub">{formatPaise(vault.totals.spent)} tracked across {$vaultData.expenses.length} expense{$vaultData.expenses.length === 1 ? '' : 's'}</p>
+					</div>
+					<button class="btn btn--primary btn--sm" type="button" onclick={() => openExpenseComposer()}>
+						<Icon name="plus" size={16} /> Add
+					</button>
+				</div>
 
+				<div class="view__cols">
+					<div class="view__aside">
 			{#if $vaultData.expenses.length}
 				<TagFilterBar
 					label="Filter expenses"
@@ -1392,9 +1456,11 @@
 				/>
 			{/if}
 
+					</div>
+					<div class="view__main">
 			{#if $vaultData.expenses.length > 4}
-				<label class="search mt-14">
-					<Icon name="search" size={18} />
+				<label class="search">
+					<Icon name="search" size={16} />
 					<input bind:value={query} type="search" placeholder="Search expenses" aria-label="Search expenses" />
 				</label>
 			{/if}
@@ -1410,12 +1476,11 @@
 				<div class="list">
 					{#each filteredExpenses as expense (expense.id)}
 						<article class="row">
-							<span class="row__icon row__icon--out" aria-hidden="true"><Icon name="money-out" size={19} /></span>
 							<div class="row__body">
-								<div class="row__tags row__tags--title">
+								<div class="row__tags">
 									{#each expense.tags as tag (tag)}
 										<button
-											class="tag-pill tag-pill--title"
+											class="tag-pill tag-pill--row"
 											class:tag-pill--on={expenseFilter.tag === tag}
 											type="button"
 											aria-label={`Show expenses tagged ${tag}`}
@@ -1449,14 +1514,19 @@
 			{:else}
 				<EmptyState icon="money-out" title="No expenses recorded" message="Track what either of you paid out, so the profit split stays honest."><button class="btn btn--primary btn--sm" type="button" onclick={() => openExpenseComposer()}>Add expense</button></EmptyState>
 			{/if}
-		{:else}
-			<section class="section__head">
-				<div class="section__title">
-					<p class="eyebrow">Vault</p>
-					<h2 class="h1">More</h2>
+					</div>
 				</div>
-			</section>
-
+			</div>
+		{:else}
+			<div class="view">
+				<div class="view__head">
+					<div class="view__titles">
+						<h2 class="h1">More</h2>
+						<p class="view__sub">History and settings for {vault.name}</p>
+					</div>
+				</div>
+				<div class="view__cols">
+					<div class="view__main">
 			<ChipGroup label="More sections" options={[{ value: 'history', label: 'History', icon: 'history' }, { value: 'settings', label: 'Settings', icon: 'info' }]} value={morePanel} onChange={(value) => (morePanel = value as MorePanel)} />
 
 			<section class="section">
@@ -1470,8 +1540,8 @@
 										<Icon name={mutationIcon(mutation)} size={19} />
 									</span>
 									<div class="row__body">
-										<p class="row__title">{mutation.summary}</p>
-										<p class="row__meta">{mutation.actorEmail} · {formatDateTime(mutation.createdAt)}</p>
+										<p class="row__title">{summaryText(mutation.summary)}</p>
+										<p class="row__meta">{actorLabel(mutation.actorEmail)} · {formatDateTime(mutation.createdAt)}</p>
 									</div>
 									<span class="row__amount num" class:row__amount--in={change.direction === 'in'} class:row__amount--out={change.direction === 'out'}>
 										{change.direction === 'out' ? '−' : '+'}{formatPaise(change.amount)}
@@ -1590,8 +1660,12 @@
 					</p>
 				{/if}
 			</section>
+					</div>
+				</div>
+			</div>
 		{/if}
 	</main>
+	</div>
 </div>
 
 {#if composer !== 'none'}
@@ -1616,9 +1690,11 @@
 						<span class="field__label">Notes <em class="field__optional">optional</em></span>
 						<textarea class="textarea" bind:value={clientNotes} maxlength="1000" rows="3" placeholder="Project or billing note" disabled={actionBusy}></textarea>
 					</label>
-					<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
+					<div class="sheet__foot">
+						<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
 						{actionBusy ? 'Saving…' : editingClient ? 'Save client' : 'Add client'}
 					</button>
+					</div>
 				</form>
 			{:else if composer === 'payment'}
 				{#if !activeClients.length}
@@ -1707,9 +1783,11 @@
 							<textarea class="textarea" bind:value={paymentNote} maxlength="1000" rows="3" placeholder="Invoice number or what the payment was for" disabled={actionBusy}></textarea>
 						</label>
 
-						<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
+						<div class="sheet__foot">
+							<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
 							{actionBusy ? 'Saving…' : editingPayment ? 'Save payment' : 'Record payment'}
 						</button>
+						</div>
 					</form>
 				{/if}
 			{:else if composer === 'project'}
@@ -1748,9 +1826,11 @@
 							<p class="tiny">Last edited by {editingProject.updatedBy} · {formatDateTime(editingProject.updatedAt)}</p>
 						{/if}
 
-						<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
+						<div class="sheet__foot">
+							<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy}>
 							{actionBusy ? 'Saving…' : editingProject ? 'Save project' : 'Add project'}
 						</button>
+						</div>
 					</form>
 				{/if}
 			{:else}
@@ -1819,9 +1899,11 @@
 						<textarea class="textarea" bind:value={expenseNote} maxlength="1000" rows="3" placeholder="Why this cost came up" disabled={actionBusy}></textarea>
 					</label>
 
-					<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy || expenseTags.length === 0}>
+					<div class="sheet__foot">
+						<button class="btn btn--primary btn--block" type="submit" disabled={actionBusy || expenseTags.length === 0}>
 						{actionBusy ? 'Saving…' : editingExpense ? 'Save expense' : 'Add expense'}
 					</button>
+					</div>
 				</form>
 			{/if}
 
