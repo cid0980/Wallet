@@ -73,7 +73,7 @@
 
 	.demo-badge {
 		position: fixed;
-		top: 8px;
+		top: 64px;
 		right: 8px;
 		z-index: 9999;
 		display: flex;

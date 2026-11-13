@@ -3921,3 +3921,106 @@ body {
 .dial__scrim {
 	touch-action: none;
 }
+
+/* ------------------------------------------------------- the vault mark ---- */
+
+/* Two people, one vault: overlapping initials say that faster than a logo. */
+.vault-mark {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	margin: -6px -8px;
+	border: 0;
+	border-radius: var(--r-md);
+	padding: 6px 8px;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: background 120ms ease;
+}
+
+.vault-mark:hover {
+	background: var(--surface-3);
+}
+
+.vault-mark:focus-visible {
+	outline: 2px solid var(--brand);
+	outline-offset: 2px;
+}
+
+.vault-mark__pair {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+}
+
+.vault-mark__face {
+	display: grid;
+	width: 28px;
+	height: 28px;
+	place-items: center;
+	border: 1.5px solid var(--surface);
+	border-radius: 50%;
+	background: var(--surface-3);
+	color: var(--ink-2);
+	font-size: 0.72rem;
+	font-weight: 750;
+	letter-spacing: 0.01em;
+}
+
+/* You are the solid one, so the pair reads in a consistent order. */
+.vault-mark__face--you {
+	background: var(--ink);
+	color: var(--surface);
+}
+
+.vault-mark__face + .vault-mark__face {
+	margin-left: -9px;
+}
+
+.sidenav__shared {
+	display: inline;
+}
+
+@media (max-width: 1023px) {
+	/* Folded: one line — initials, vault name, sync. Partner line steps aside. */
+	.sidenav.is-condensed .sidenav__id {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.sidenav.is-condensed .sidenav__shared {
+		display: none;
+	}
+
+	.sidenav.is-condensed .sidenav__meta {
+		display: contents;
+	}
+
+	.sidenav.is-condensed .sidenav__sync {
+		margin-left: 0;
+	}
+}
+
+@media (min-width: 1024px) {
+	.vault-mark {
+		align-items: flex-start;
+		padding: 0;
+		margin: 0;
+		cursor: pointer;
+	}
+
+	.vault-mark:hover {
+		background: transparent;
+	}
+
+	.vault-mark__face {
+		width: 30px;
+		height: 30px;
+		font-size: 0.76rem;
+	}
+}

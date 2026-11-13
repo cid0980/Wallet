@@ -167,6 +167,7 @@
 	$: ownName = ownPartner === 'a' ? vault.members.a.name : vault.members.b.name;
 	$: otherName = ownPartner === 'a' ? vault.members.b.name : vault.members.a.name;
 	$: ownInitial = ownName.trim().slice(0, 1).toUpperCase() || '•';
+	$: otherInitial = otherName.trim().slice(0, 1).toUpperCase() || '•';
 	$: ownFirst = ownName.trim().split(/\s+/)[0] || 'there';
 	$: selectedPaymentClient = activeClients.find((client) => client.id === paymentClientId) ?? null;
 	$: selectedExpenseClient = activeClients.find((client) => client.id === expenseClientId) ?? null;
@@ -393,6 +394,19 @@
 		...section,
 		angle: 180 - ((index + 0.5) * 180) / sections.length
 	}));
+
+	/** The mark opens the shared settings, so the bar carries one real action. */
+	function openVaultSettings(): void {
+		switchTab('more');
+		morePanel = 'settings';
+	}
+
+	/** Past a short scroll the bar folds to one line: mark, name, sync. */
+	let headerCondensed = false;
+
+	function handleScroll(): void {
+		headerCondensed = window.scrollY > 24;
+	}
 
 	function chooseSection(id: MainTab): void {
 		dialOpen = false;
@@ -1074,14 +1088,17 @@
 <div class="shell">
 	<a class="skip-link" href="#vault-main">Skip to content</a>
 
-	<aside class="sidenav">
+	<aside class="sidenav" class:is-condensed={headerCondensed}>
 		<div class="sidenav__top">
-			<div class="sidenav__brand">
-				<span class="sidenav__logo" aria-hidden="true">{vault.name.trim().slice(0, 1).toUpperCase() || 'V'}</span>
+			<button class="vault-mark" type="button" aria-label={`Open settings for ${vault.name}`} onclick={openVaultSettings}>
+				<span class="vault-mark__pair" aria-hidden="true">
+					<span class="vault-mark__face vault-mark__face--you">{ownInitial}</span>
+					<span class="vault-mark__face">{otherInitial}</span>
+				</span>
 				<span class="sidenav__id">
 					<span class="sidenav__name">{vault.name}</span>
 					<span class="sidenav__meta">
-						Shared with {otherName}
+						<span class="sidenav__shared">Shared with {otherName}</span>
 						{#if isOffline}
 							<span class="sidenav__sync sidenav__sync--offline" role="status"><span class="sidenav__sync-dot" aria-hidden="true"></span>Offline</span>
 						{:else if isSyncing}
@@ -1091,7 +1108,7 @@
 						{/if}
 					</span>
 				</span>
-			</div>
+			</button>
 		</div>
 
 		<nav class="tabs" aria-label="Vault sections">
@@ -1805,7 +1822,7 @@
 	</nav>
 </div>
 
-<svelte:window onkeydown={(event) => { if (event.key === 'Escape' && dialOpen) dialOpen = false; }} />
+<svelte:window onscroll={handleScroll} onkeydown={(event) => { if (event.key === 'Escape' && dialOpen) dialOpen = false; }} />
 
 {#if composer !== 'none'}
 	<Sheet
