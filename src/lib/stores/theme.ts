@@ -5,9 +5,10 @@
  * device on purpose — the vault itself stays theme-free, so two people can read
  * the same records on differently-lit phones.
  *
- * The choice is painted onto <html data-theme>, and the phone's status and
- * navigation bars are kept in step — see CHROME and manifestHref below for why
- * that has to go through the manifest and not just a meta tag.
+ * The choice is painted onto <html data-theme> and onto the status bar through
+ * the theme-color meta. The navigation bar is a separate story: Android bakes it
+ * from the manifest at install time and never reads it again, so it is pinned to
+ * one dark value for everybody — see static/manifest.webmanifest.
  */
 import { get, writable } from 'svelte/store';
 
@@ -24,25 +25,20 @@ export const THEME_KEY = 'vault.theme';
 export const DEFAULT_THEME: ThemePref = 'light';
 
 /**
- * The two values the system bars are painted with — always the page background,
- * never the brand green, so the bars read as part of the app.
+ * The status-bar colour for each theme. It is the page background, never the
+ * brand blue, so the status bar reads as part of the screen.
  *
- * An installed Android app builds these into its home-screen record at install
- * time and only ever reads them from the web app manifest (a meta tag is ignored
- * inside a standalone window), and a manifest holds a single colour. Hence one
- * manifest per theme, swapped through the <link rel="manifest"> tag.
+ * This only reaches the status bar: inside an installed app Android paints the
+ * navigation bar from the manifest, which it reads once at install time, so that
+ * one is pinned to a single dark value rather than chasing the theme.
  */
-const CHROME: Record<ResolvedTheme, { color: string; manifest: string }> = {
-	light: { color: '#f8fafc', manifest: '/manifest.webmanifest' },
-	dark: { color: '#0b1220', manifest: '/manifest.dark.webmanifest' }
+const CHROME: Record<ResolvedTheme, string> = {
+	light: '#f8fafc',
+	dark: '#0b1220'
 };
 
-export function manifestHref(theme: ResolvedTheme): string {
-	return CHROME[theme].manifest;
-}
-
 export function chromeColor(theme: ResolvedTheme): string {
-	return CHROME[theme].color;
+	return CHROME[theme];
 }
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
@@ -80,8 +76,6 @@ function paint(pref: ThemePref): ResolvedTheme {
 	root.style.colorScheme = resolved;
 	const meta = document.querySelector('meta[name="theme-color"]');
 	if (meta) meta.setAttribute('content', chromeColor(resolved));
-	const link = document.querySelector('link[rel="manifest"]');
-	if (link) link.setAttribute('href', manifestHref(resolved));
 	return resolved;
 }
 

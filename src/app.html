@@ -5,11 +5,10 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="color-scheme" content="light dark" />
 		<!--
-			The phone's status and navigation bars are painted from these two values,
-			never from the app's brand green. An installed Android app only reads
-			them from the web app manifest, and one manifest cannot hold a light and
-			a dark colour, so there are two manifests and the link is pointed at the
-			matching one before first paint and on every theme change.
+			The status bar follows the theme through this meta tag. The navigation
+			bar cannot: Android bakes it from the manifest once, at install time, so
+			the manifest pins one dark value for everybody instead of chasing a
+			theme that would only reach it a day later.
 		-->
 		<meta name="theme-color" content="#f8fafc" />
 		<script>
@@ -25,8 +24,6 @@
 				root.style.colorScheme = dark ? 'dark' : 'light';
 				var chrome = document.querySelector('meta[name="theme-color"]');
 				if (chrome) chrome.setAttribute('content', dark ? '#0b1220' : '#f8fafc');
-				var manifest = document.querySelector('link[rel="manifest"]');
-				if (manifest) manifest.setAttribute('href', dark ? '/manifest.dark.webmanifest' : '/manifest.webmanifest');
 			} catch (error) {
 				/* a browser without storage just gets the light default */
 			}

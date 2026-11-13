@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DEFAULT_THEME, THEME_KEY, chromeColor, isThemePref, manifestHref, resolveTheme } from '../src/lib/stores/theme.ts';
+import { DEFAULT_THEME, THEME_KEY, chromeColor, isThemePref, resolveTheme } from '../src/lib/stores/theme.ts';
 
 test('the storage key stays put, so a choice survives a deploy', () => {
 	assert.equal(THEME_KEY, 'vault.theme');
@@ -26,13 +26,7 @@ test('only the three known values are accepted from storage', () => {
 	assert.equal(isThemePref(undefined), false);
 });
 
-test('each theme points at its own manifest, so the system bars can match', () => {
-	assert.equal(manifestHref('light'), '/manifest.webmanifest');
-	assert.equal(manifestHref('dark'), '/manifest.dark.webmanifest');
-	assert.notEqual(manifestHref('light'), manifestHref('dark'));
-});
-
-test('the system bars take the page background, never the brand green', () => {
+test('the status bar takes the page background, never the brand blue', () => {
 	assert.equal(chromeColor('light'), '#f8fafc');
 	assert.equal(chromeColor('dark'), '#0b1220');
 	assert.ok(![chromeColor('light'), chromeColor('dark')].includes('#0d9488'));
