@@ -45,7 +45,7 @@
 {#if !dismissed && (offlineReady || updateAvailable)}
 	<aside class="pwa" aria-live="polite">
 		<div>
-			<strong>{updateAvailable ? 'A Vault update is ready.' : 'Vault is ready for offline use.'}</strong>
+			<strong>{updateAvailable ? 'A Tandem update is ready.' : 'Tandem is ready for offline use.'}</strong>
 			<p>
 				{updateAvailable
 					? 'Refresh to use the newest version.'

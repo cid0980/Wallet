@@ -81,10 +81,10 @@
 		gap: 8px;
 		padding: 7px 11px;
 		border-radius: 999px;
-		background: rgba(11, 32, 21, 0.92);
-		color: #eaf5ee;
+		background: rgba(15, 23, 42, 0.92);
+		color: #e2e8f0;
 		font: 500 11px/1.3 ui-sans-serif, system-ui, sans-serif;
-		box-shadow: 0 8px 24px rgba(6, 24, 14, 0.28);
+		box-shadow: 0 8px 24px rgba(2, 6, 23, 0.32);
 		max-width: calc(100vw - 24px);
 		backdrop-filter: blur(6px);
 	}

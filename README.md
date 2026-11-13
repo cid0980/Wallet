@@ -1,6 +1,6 @@
-# Vault
+# Tandem
 
-A private shared money tracker for two partners who work on client projects together. Vault is a static, mobile-first PWA with verified email/password sign-in, a two-person Firestore Vault, integer-paise accounting, an audit history, and offline-capable browser caching.
+A private shared money tracker for two partners who work on client projects together. Tandem is a static, mobile-first PWA with verified email/password sign-in, a two-person Firestore Vault, integer-paise accounting, an audit history, and offline-capable browser caching.
 
 ## Delivery status
 

@@ -65,8 +65,8 @@
 </script>
 
 <section class="auth" aria-labelledby="login-title">
-	<div class="auth__mark" aria-hidden="true">V</div>
-	<p class="eyebrow">Vault</p>
+	<div class="auth__mark" aria-hidden="true">T</div>
+	<p class="eyebrow">Tandem</p>
 	<h1 class="h1 auth__title" id="login-title">
 		{mode === 'create'
 			? 'Create your account.'
@@ -170,7 +170,7 @@
 
 	{#if diagnostic}
 		<details class="raw">
-			<summary>What Vault received from Firebase</summary>
+			<summary>What Tandem received from Firebase</summary>
 			<pre>{diagnostic}</pre>
 		</details>
 	{/if}

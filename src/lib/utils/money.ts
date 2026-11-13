@@ -32,7 +32,7 @@ export function parseMoneyToPaise(rawValue: string): number {
 	}
 
 	if (paise > BigInt(MAX_PAISE)) {
-		throw new MoneyParseError('That amount is too large for Vault.');
+		throw new MoneyParseError('That amount is too large for Tandem.');
 	}
 
 	return Number(paise);

@@ -11,7 +11,7 @@
 			a dark colour, so there are two manifests and the link is pointed at the
 			matching one before first paint and on every theme change.
 		-->
-		<meta name="theme-color" content="#f5f7f6" />
+		<meta name="theme-color" content="#f8fafc" />
 		<script>
 			// Runs before first paint so a dark phone never flashes white, and so the
 			// system bars are drawn in the right colour from the first frame.
@@ -24,7 +24,7 @@
 				root.dataset.theme = dark ? 'dark' : 'light';
 				root.style.colorScheme = dark ? 'dark' : 'light';
 				var chrome = document.querySelector('meta[name="theme-color"]');
-				if (chrome) chrome.setAttribute('content', dark ? '#0e1210' : '#f5f7f6');
+				if (chrome) chrome.setAttribute('content', dark ? '#0b1220' : '#f8fafc');
 				var manifest = document.querySelector('link[rel="manifest"]');
 				if (manifest) manifest.setAttribute('href', dark ? '/manifest.dark.webmanifest' : '/manifest.webmanifest');
 			} catch (error) {
@@ -35,8 +35,8 @@
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<link rel="manifest" href="/manifest.webmanifest" />
-		<link rel="icon" href="/icons/vault-192.png" type="image/png" />
-		<link rel="apple-touch-icon" href="/icons/vault-192.png" />
+		<link rel="icon" href="/icons/tandem-192.png" type="image/png" />
+		<link rel="apple-touch-icon" href="/icons/tandem-192.png" />
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

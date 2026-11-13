@@ -1194,7 +1194,7 @@
 			</button>
 		</div>
 
-		<nav class="tabs" aria-label="Vault sections">
+		<nav class="tabs" aria-label="App sections">
 			{#each sections as section (section.id)}
 				<button class="tab" class:tab--on={activeTab === section.id} type="button" aria-current={activeTab === section.id} onclick={() => switchTab(section.id)}>
 					<Icon name={section.icon} size={17} />
@@ -1296,7 +1296,7 @@
 				{:else if $vaultData.projects.length}
 					<EmptyState icon="target" title="No work in progress" message="Every project is marked work-done. Start something new, or reopen a project from the Projects tab."><button class="btn btn--outline btn--sm" type="button" onclick={() => switchTab('projects')}>See projects</button></EmptyState>
 				{:else}
-					<EmptyState icon="target" title="No projects yet" message="Add a project with an estimated price. Vault tracks payments against it and shows when it is fully paid."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button></EmptyState>
+					<EmptyState icon="target" title="No projects yet" message="Add a project with an estimated price. Tandem tracks payments against it and shows when it is fully paid."><button class="btn btn--primary btn--sm" type="button" onclick={() => openProjectComposer()}>Add a project</button></EmptyState>
 				{/if}
 			</section>
 
@@ -1783,7 +1783,7 @@
 						</section>
 
 						<section class="group">
-							<h3 class="group__title">Vault</h3>
+							<h3 class="group__title">Shared vault</h3>
 							<div class="panel">
 								<div class="panel__row panel__row--kv">
 									<p class="panel__label">Name</p>
@@ -1895,7 +1895,7 @@
 								</div>
 								<div class="panel__row">
 									<div class="panel__body">
-										<p class="panel__value">Sign out of Vault</p>
+										<p class="panel__value">Sign out of Tandem</p>
 										<p class="panel__meta">Keeps this device's offline copy.</p>
 									</div>
 									<button class="panel__action" type="button" disabled={actionBusy || signingOutNow} onclick={() => void requestSignOut('keep')}>
@@ -1927,7 +1927,7 @@
 	<nav
 		class="dial"
 		class:is-open={dialOpen}
-		aria-label="Vault sections"
+		aria-label="App sections"
 		onpointerdown={startSwipe}
 		onpointermove={moveSwipe}
 		onpointerup={endSwipe}
@@ -2114,7 +2114,7 @@
 								<span class="amount-field__sign" aria-hidden="true">₹</span>
 								<input bind:value={projectEstimate} inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Estimated price in rupees" required disabled={actionBusy} />
 							</label>
-							<p class="hint">Record each installment as it arrives. Vault adds them up against this estimate and shows “Fully paid” when the received total reaches it.</p>
+							<p class="hint">Record each installment as it arrives. Tandem adds them up against this estimate and shows “Fully paid” when the received total reaches it.</p>
 						</div>
 
 						<label class="field">

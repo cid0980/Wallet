@@ -15,37 +15,40 @@
 :root {
 	color-scheme: light;
 
-	/* Surfaces: page is a soft neutral, cards are pure white so they lift on
+	/* Surfaces: page is a cool off-white, cards are pure white so they lift on
 	   their own without a single drop shadow. */
-	--bg: #f5f7f6;
+	--bg: #f8fafc;
 	--surface: #ffffff;
-	--surface-2: #fafbfa;
-	--surface-3: #f1f4f2;
+	--surface-2: #f8fafc;
+	--surface-3: #f1f5f9;
 
-	/* Charcoal, not black. Muted steps for metadata. */
-	--ink: #1b2620;
-	--ink-2: #46574e;
-	--ink-3: #6d7d75;
-	--line: #e3e8e5;
-	--line-2: #d2dad5;
+	/* Deep slate, not black. Muted steps for metadata. */
+	--ink: #0f172a;
+	--ink-2: #334155;
+	--ink-3: #64748b;
+	--line: #e2e8f0;
+	--line-2: #cbd5e1;
 
-	--brand: #0b7a44;
-	--brand-2: #085f36;
-	--brand-soft: #e8f4ed;
-	--brand-ink: #0a6b3d;
+	/* One accent: modern teal. Fills carrying white labels sit one step deeper
+	   (#0f766e) so the text clears AA; #0d9488 is the accent for meters, rings
+	   and icons. */
+	--brand: #0f766e;
+	--brand-2: #115e59;
+	--brand-soft: #f0fdfa;
+	--brand-ink: #115e59;
 
 	/* Status colours are reserved for status: in/out direction, errors, warnings. */
-	--in: #0b7a44;
-	--in-soft: #e8f4ed;
-	--out: #b3402b;
-	--out-soft: #fbeeeb;
+	--in: #0f766e;
+	--in-soft: #f0fdfa;
+	--out: #b91c1c;
+	--out-soft: #fef2f2;
 
-	--danger: #b03927;
-	--danger-soft: #fbeeea;
-	--danger-line: #f0d2ca;
-	--warn: #7d5c11;
-	--warn-soft: #fbf5e6;
-	--warn-line: #e8d9ae;
+	--danger: #b91c1c;
+	--danger-soft: #fef2f2;
+	--danger-line: #fecaca;
+	--warn: #92400e;
+	--warn-soft: #fffbeb;
+	--warn-line: #fde68a;
 
 	/* One radius scale for every container, so nothing looks bolted on. */
 	--r-xl: 14px;
@@ -56,29 +59,29 @@
 
 	/* Depth comes from borders, not shadows. These stay for focus/overlay only. */
 	--sh-1: none;
-	--sh-2: 0 24px 60px -32px rgb(16 33 26 / 32%);
-	--focus: 0 0 0 3px rgb(11 122 68 / 24%);
+	--sh-2: 0 24px 60px -32px rgb(15 23 42 / 32%);
+	--focus: 0 0 0 3px rgb(13 148 136 / 24%);
 
 	/* Surfaces that sit on top of other surfaces, and the few places where a
 	   colour cannot be a brand tint (hover wash, success toast, the fab). */
-	--btn-hover: #e9eeeb;
-	--ok-bg: #f3fbf6;
-	--ok-line: #b7e3c9;
-	--ok-ink: #14532f;
-	--ok-ink-2: #406952;
-	--spinner-track: #d3e7dc;
-	--skeleton-hi: #e9efeb;
-	--danger-icon-bg: #f8d9d1;
-	--avatar-b-bg: #e8eaff;
-	--avatar-b-ink: #454b9e;
-	--fab-bg: #1b2620;
-	--fab-open-bg: #46574e;
+	--btn-hover: #f1f5f9;
+	--ok-bg: #f0fdfa;
+	--ok-line: #99f6e4;
+	--ok-ink: #115e59;
+	--ok-ink-2: #0f766e;
+	--spinner-track: #ccfbf1;
+	--skeleton-hi: #eef2f7;
+	--danger-icon-bg: #fee2e2;
+	--avatar-b-bg: #e2e8f0;
+	--avatar-b-ink: #334155;
+	--fab-bg: #0f172a;
+	--fab-open-bg: #334155;
 	--fab-ink: #ffffff;
-	--glow-a: rgb(38 168 100 / 12%);
-	--glow-b: rgb(11 122 68 / 10%);
-	--chip-ring: rgb(11 122 68 / 35%);
-	--seg-ring: rgb(11 122 68 / 30%);
-	--brand-ring: rgb(11 122 68 / 45%);
+	--glow-a: rgb(13 148 136 / 9%);
+	--glow-b: rgb(15 23 42 / 5%);
+	--chip-ring: rgb(13 148 136 / 35%);
+	--seg-ring: rgb(13 148 136 / 32%);
+	--brand-ring: rgb(13 148 136 / 45%);
 
 	--nav-h: 56px;
 	--gutter: 14px;
@@ -92,56 +95,56 @@
 :root[data-theme='dark'] {
 	color-scheme: dark;
 
-	--bg: #0e1210;
-	--surface: #171c19;
-	--surface-2: #1b201d;
-	--surface-3: #212724;
+	--bg: #0b1220;
+	--surface: #111a2b;
+	--surface-2: #0f172a;
+	--surface-3: #1a2436;
 
-	--ink: #edf2ee;
-	--ink-2: #bfcac3;
-	--ink-3: #8d9a93;
-	--line: #29302c;
-	--line-2: #39423c;
+	--ink: #f1f5f9;
+	--ink-2: #cbd5e1;
+	--ink-3: #94a3b8;
+	--line: #1e293b;
+	--line-2: #334155;
 
-	--brand: #0d8146;
-	--brand-2: #0a6b3c;
-	--brand-soft: #12291d;
-	--brand-ink: #5cd598;
+	--brand: #0f766e;
+	--brand-2: #115e59;
+	--brand-soft: #0f2b2a;
+	--brand-ink: #5eead4;
 
-	--in: #4cd396;
-	--in-soft: #10301f;
-	--out: #ef8d75;
-	--out-soft: #2c1712;
+	--in: #2dd4bf;
+	--in-soft: #0f2b2a;
+	--out: #fca5a5;
+	--out-soft: #2a1616;
 
-	--danger: #ff9a83;
-	--danger-soft: #2c1714;
-	--danger-line: #4c2820;
-	--warn: #e5bf78;
-	--warn-soft: #2a2213;
-	--warn-line: #4a3a1c;
+	--danger: #fca5a5;
+	--danger-soft: #2a1616;
+	--danger-line: #4c2626;
+	--warn: #fcd34d;
+	--warn-soft: #2a2211;
+	--warn-line: #4d3d1a;
 
 	--sh-1: none;
-	--sh-2: 0 24px 60px -32px rgb(0 0 0 / 72%);
-	--focus: 0 0 0 3px rgb(92 213 152 / 30%);
+	--sh-2: 0 24px 60px -32px rgb(2 6 23 / 72%);
+	--focus: 0 0 0 3px rgb(45 212 191 / 26%);
 
-	--btn-hover: #242b27;
-	--ok-bg: #10241a;
-	--ok-line: #2b4a38;
-	--ok-ink: #7fe0ac;
-	--ok-ink-2: #5cb98a;
-	--spinner-track: #2c3a33;
-	--skeleton-hi: #262d29;
-	--danger-icon-bg: #3a1d18;
-	--avatar-b-bg: #232a45;
-	--avatar-b-ink: #b6bff6;
-	--fab-bg: #2b332e;
-	--fab-open-bg: #3c463f;
-	--fab-ink: #edf2ee;
-	--glow-a: rgb(30 150 92 / 16%);
-	--glow-b: rgb(20 110 70 / 14%);
-	--chip-ring: rgb(92 213 152 / 38%);
-	--seg-ring: rgb(92 213 152 / 34%);
-	--brand-ring: rgb(92 213 152 / 55%);
+	--btn-hover: #1a2436;
+	--ok-bg: #0f2b2a;
+	--ok-line: #134e4a;
+	--ok-ink: #5eead4;
+	--ok-ink-2: #2dd4bf;
+	--spinner-track: #1c3a37;
+	--skeleton-hi: #202c40;
+	--danger-icon-bg: #3a1d1d;
+	--avatar-b-bg: #1e293b;
+	--avatar-b-ink: #cbd5e1;
+	--fab-bg: #1a2436;
+	--fab-open-bg: #2b3a4f;
+	--fab-ink: #f1f5f9;
+	--glow-a: rgb(13 148 136 / 16%);
+	--glow-b: rgb(37 99 235 / 8%);
+	--chip-ring: rgb(45 212 191 / 38%);
+	--seg-ring: rgb(45 212 191 / 34%);
+	--brand-ring: rgb(45 212 191 / 55%);
 }
 
 *,
@@ -189,7 +192,7 @@ a {
 }
 
 :focus-visible {
-	outline: 3px solid rgb(11 122 68 / 34%);
+	outline: 3px solid rgb(13 148 136 / 34%);
 	outline-offset: 2px;
 }
 
@@ -390,8 +393,8 @@ main:focus {
 
 .btn--primary {
 	border-color: transparent;
-	background: linear-gradient(140deg, #12874c, var(--brand-2));
-	box-shadow: 0 10px 22px -14px rgb(8 92 52 / 80%);
+	background: linear-gradient(140deg, #0d9488, var(--brand-2));
+	box-shadow: 0 10px 22px -14px rgb(15 118 110 / 80%);
 	color: #fff;
 }
 
@@ -1014,17 +1017,17 @@ main:focus {
 	padding: 24px 22px;
 	border-radius: var(--r-xl);
 	background:
-		radial-gradient(16rem 12rem at 102% -10%, rgb(146 244 184 / 30%), transparent 70%),
-		linear-gradient(140deg, #0d7f47, #06502d);
-	box-shadow: 0 22px 44px -26px rgb(6 80 45 / 90%);
+		radial-gradient(16rem 12rem at 102% -10%, rgb(204 251 241 / 30%), transparent 70%),
+		linear-gradient(140deg, #0d9488, #115e59);
+	box-shadow: 0 22px 44px -26px rgb(17 94 89 / 90%);
 	color: #fff;
 }
 
 .hero--negative {
 	background:
 		radial-gradient(16rem 12rem at 102% -10%, rgb(255 190 175 / 26%), transparent 70%),
-		linear-gradient(140deg, #a4442f, #6f2a1d);
-	box-shadow: 0 22px 44px -26px rgb(111 42 29 / 90%);
+		linear-gradient(140deg, #b91c1c, #7f1d1d);
+	box-shadow: 0 22px 44px -26px rgb(127 29 29 / 55%);
 }
 
 .hero__label {
@@ -1124,8 +1127,8 @@ main:focus {
 	border: 1px solid transparent;
 	border-radius: var(--r-lg);
 	padding: 12px 16px;
-	background: linear-gradient(140deg, #0f8350, #0a6b40);
-	box-shadow: 0 14px 28px -20px rgb(8 92 52 / 90%);
+	background: linear-gradient(140deg, #0d9488, #115e59);
+	box-shadow: 0 14px 28px -20px rgb(15 118 110 / 90%);
 	color: #fff;
 	text-align: left;
 	cursor: pointer;
@@ -1438,7 +1441,7 @@ main:focus {
 
 /* The sheet is a native modal dialog, so the dimming layer is ::backdrop. */
 dialog.sheet::backdrop {
-	background: rgb(9 26 17 / 46%);
+	background: rgb(2 6 23 / 46%);
 }
 
 .sheet {
@@ -1455,7 +1458,7 @@ dialog.sheet::backdrop {
 	width: min(100%, 34rem);
 	padding: 0;
 	background: var(--surface);
-	box-shadow: 0 -18px 50px -20px rgb(9 26 17 / 45%);
+	box-shadow: 0 -18px 50px -20px rgb(2 6 23 / 45%);
 	color: var(--ink);
 	animation: sheet-in 180ms ease-out;
 }
@@ -1662,11 +1665,11 @@ dialog.sheet::backdrop {
 	place-items: center;
 	margin-bottom: 18px;
 	border-radius: 15px;
-	background: linear-gradient(140deg, #148a4d, var(--brand-2));
+	background: linear-gradient(140deg, #0d9488, var(--brand-2));
 	color: #fff;
 	font-size: 1.25rem;
 	font-weight: 850;
-	box-shadow: 0 12px 24px -14px rgb(6 80 45 / 90%);
+	box-shadow: 0 12px 24px -14px rgb(17 94 89 / 90%);
 }
 
 .auth__title {
@@ -1754,7 +1757,7 @@ details.raw pre {
 	flex: 0 0 auto;
 	place-items: center;
 	border-radius: 14px;
-	background: linear-gradient(140deg, #148a4d, var(--brand-2));
+	background: linear-gradient(140deg, #0d9488, var(--brand-2));
 	color: #fff;
 	font-size: 1.1rem;
 	font-weight: 850;
@@ -2004,13 +2007,13 @@ code {
 	place-items: center;
 	border: 0;
 	border-radius: 50%;
-	background: rgb(11 122 68 / 14%);
+	background: rgb(13 148 136 / 14%);
 	color: inherit;
 	cursor: pointer;
 }
 
 .chip__x:hover {
-	background: rgb(11 122 68 / 24%);
+	background: rgb(13 148 136 / 24%);
 }
 
 .chip__x[disabled] {
@@ -2089,14 +2092,14 @@ code {
 }
 
 .chip--choice:focus-within {
-	outline: 3px solid rgb(11 122 68 / 34%);
+	outline: 3px solid rgb(13 148 136 / 34%);
 	outline-offset: 2px;
 }
 
 .chip--choice:has(input:checked) {
 	border-color: transparent;
 	background: var(--brand-soft);
-	box-shadow: inset 0 0 0 1.5px rgb(11 122 68 / 35%);
+	box-shadow: inset 0 0 0 1.5px rgb(13 148 136 / 35%);
 	color: var(--brand-ink);
 }
 
@@ -3036,14 +3039,15 @@ body {
 }
 
 .chip--on {
-	border-color: var(--ink);
-	background: var(--surface);
-	color: var(--ink);
-	box-shadow: inset 0 0 0 1px var(--ink);
+	border-color: transparent;
+	background: var(--brand-soft);
+	color: var(--brand-ink);
+	box-shadow: inset 0 0 0 1.5px var(--brand-ring);
 }
 
 .chip--on .chip__dot {
-	background: var(--ink);
+	background: var(--brand-ring);
+	color: var(--surface);
 }
 
 .chips {
@@ -3968,7 +3972,7 @@ body {
 		border-radius: 50%;
 		background: var(--surface);
 		color: var(--ink-2);
-		box-shadow: 0 10px 22px -16px rgb(9 26 17 / 70%);
+		box-shadow: 0 10px 22px -16px rgb(2 6 23 / 70%);
 		/* Parked on the button, tiny and invisible, until the dial opens. */
 		transform: rotate(calc(-1 * var(--a))) translateX(0) rotate(var(--a)) scale(0.35);
 		opacity: 0;
@@ -4014,7 +4018,7 @@ body {
 		border-radius: 50%;
 		background: var(--fab-bg);
 		color: var(--fab-ink);
-		box-shadow: 0 14px 28px -16px rgb(9 26 17 / 80%);
+		box-shadow: 0 14px 28px -16px rgb(2 6 23 / 80%);
 		pointer-events: auto;
 		transition: transform 220ms cubic-bezier(0.2, 0.9, 0.25, 1.05), background 140ms ease;
 	}
@@ -4043,7 +4047,7 @@ body {
 	border-color: var(--brand);
 	background: var(--brand-soft);
 	color: var(--brand);
-	box-shadow: 0 0 0 4px rgb(11 122 68 / 16%);
+	box-shadow: 0 0 0 4px rgb(13 148 136 / 16%);
 }
 
 /* The gesture needs raw pointer moves, so the browser must not pan first. */
@@ -4210,19 +4214,6 @@ body {
 
 .panel__row--stack {
 	align-items: flex-start;
-}
-
-/* In dark the ink ring would be a white outline: use the brand instead. */
-:root[data-theme='dark'] .chip--on {
-	border-color: transparent;
-	background: var(--brand-soft);
-	box-shadow: inset 0 0 0 1.5px var(--brand-ring);
-	color: var(--brand-ink);
-}
-
-:root[data-theme='dark'] .chip--on .chip__dot {
-	background: var(--brand-ring);
-	color: var(--surface);
 }
 
 /* Label on top, control across the row — the label must never be squeezed.

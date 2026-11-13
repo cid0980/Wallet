@@ -318,7 +318,7 @@ function ensureVaultTotals(vault: VaultSummary): VaultTotals {
 	];
 
 	if (!values.every(isValidPaise)) {
-		throw new Error('Vault totals are invalid. Refresh the app before recording money.');
+		throw new Error('Tandem totals are invalid. Refresh the app before recording money.');
 	}
 
 	return totals;
@@ -497,7 +497,7 @@ export function toVaultMutation(snapshot: QueryDocumentSnapshot<DocumentData>): 
 		recordId: asString(data.recordId),
 		delta: toMutationDelta(data.delta),
 		actorEmail: asString(data.actorEmail),
-		summary: asString(data.summary, 'Vault updated'),
+		summary: asString(data.summary, 'Tandem updated'),
 		createdAt: asDate(data.createdAt)
 	};
 }
@@ -929,14 +929,14 @@ export function vaultDataErrorMessage(error: unknown): string {
 
 	switch (code) {
 		case 'permission-denied':
-			return 'Vault could not save that change. Publish the current firestore.rules from the repository, then try again.';
+			return 'Tandem could not save that change. Publish the current firestore.rules from the repository, then try again.';
 		case 'unavailable':
-			return 'Vault is offline. Your change will save when a connection is available.';
+			return 'Tandem is offline. Your change will save when a connection is available.';
 		case 'failed-precondition':
-			return 'This action needs a newer Vault version. Refresh and try again.';
+			return 'This action needs a newer Tandem version. Refresh and try again.';
 		case 'not-found':
 			return 'That item no longer exists. Refresh and try again.';
 		default:
-			return error instanceof Error ? error.message : 'Vault could not save that change.';
+			return error instanceof Error ? error.message : 'Tandem could not save that change.';
 	}
 }

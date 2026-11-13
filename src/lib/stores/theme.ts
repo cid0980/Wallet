@@ -26,8 +26,8 @@ export const THEME_KEY = 'vault.theme';
  * manifest per theme, swapped through the <link rel="manifest"> tag.
  */
 const CHROME: Record<ResolvedTheme, { color: string; manifest: string }> = {
-	light: { color: '#f5f7f6', manifest: '/manifest.webmanifest' },
-	dark: { color: '#0e1210', manifest: '/manifest.dark.webmanifest' }
+	light: { color: '#f8fafc', manifest: '/manifest.webmanifest' },
+	dark: { color: '#0b1220', manifest: '/manifest.dark.webmanifest' }
 };
 
 export function manifestHref(theme: ResolvedTheme): string {

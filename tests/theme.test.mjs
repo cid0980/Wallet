@@ -33,7 +33,7 @@ test('each theme points at its own manifest, so the system bars can match', () =
 });
 
 test('the system bars take the page background, never the brand green', () => {
-	assert.equal(chromeColor('light'), '#f5f7f6');
-	assert.equal(chromeColor('dark'), '#0e1210');
-	assert.ok(![chromeColor('light'), chromeColor('dark')].includes('#0b7a44'));
+	assert.equal(chromeColor('light'), '#f8fafc');
+	assert.equal(chromeColor('dark'), '#0b1220');
+	assert.ok(![chromeColor('light'), chromeColor('dark')].includes('#0d9488'));
 });

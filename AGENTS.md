@@ -1,6 +1,6 @@
-# Vault agent instructions
+# Tandem agent instructions
 
-Vault is a Svelte 5, TypeScript and Firebase app for two people. Before changing the UI, read all five project-local skills in `.agents/skills/`:
+Tandem (formerly Vault) is a Svelte 5, TypeScript and Firebase app for two people. Before changing the UI, read all five project-local skills in `.agents/skills/`:
 
 1. `shadcn-ui-master/SKILL.md` (component architecture, adapted to Svelte)
 2. `wcag-accessibility-guardrail/SKILL.md`

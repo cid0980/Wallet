@@ -159,7 +159,7 @@
 			startupError = null;
 			observeVaultSession(email, force);
 		} catch (error) {
-			reportStartupFailure('opening your Vault', error);
+			reportStartupFailure('opening your vault', error);
 		}
 	}
 
@@ -172,9 +172,9 @@
 	}
 
 	function reportStartupFailure(activity: string, error: unknown): void {
-		const message = error instanceof Error ? error.message : 'Vault could not start on this device.';
+		const message = error instanceof Error ? error.message : 'Tandem could not start on this device.';
 		console.info('[vault:startup] failed while ' + activity, error);
-		startupError = `Vault ran into a problem while ${activity}: ${message}`;
+		startupError = `Tandem ran into a problem while ${activity}: ${message}`;
 	}
 
 	async function handleCreateVault(input: VaultSetupInput): Promise<void> {
@@ -266,7 +266,7 @@
 </script>
 
 <svelte:head>
-	<title>Vault — Shared money tracker</title>
+	<title>Tandem — Shared money tracker</title>
 	<meta
 		name="description"
 		content="A private shared tracker for client payments, spending, and project balances."
@@ -278,10 +278,10 @@
 		{#snippet failed(error)}
 			<div class="page">
 				<section class="card card--pad narrow" aria-labelledby="crash-title">
-					<p class="eyebrow">Vault screen</p>
+					<p class="eyebrow">Tandem screen</p>
 					<h1 class="h1 mt-10" id="crash-title">This screen could not be drawn.</h1>
 					<p class="lead mt-10">
-						{error instanceof Error ? error.message : 'The Vault screen hit an unexpected problem.'}
+						{error instanceof Error ? error.message : 'The Tandem screen hit an unexpected problem.'}
 					</p>
 					<div class="grid-2 mt-14">
 						<button class="btn btn--primary" type="button" onclick={() => window.location.reload()}>
@@ -301,7 +301,7 @@
 		{#if $authState.status === 'loading'}
 			<div class="card card--pad narrow loader" aria-live="polite">
 				<span class="spinner" aria-hidden="true"></span>
-				<p class="muted">Checking your secure Vault session…</p>
+				<p class="muted">Checking your secure session…</p>
 			</div>
 		{:else if $authState.status === 'signed-out' || $authState.status === 'signing-in' || $authState.status === 'error'}
 			<EmailLogin
@@ -351,7 +351,7 @@
 			{#if $vaultSession.status === 'idle' || $vaultSession.status === 'loading'}
 				<div class="card card--pad narrow loader" aria-live="polite">
 					<span class="spinner" aria-hidden="true"></span>
-					<p class="muted">Finding your shared Vault…</p>
+					<p class="muted">Finding your shared vault…</p>
 				</div>
 			{:else if $vaultSession.status === 'no-vault'}
 				<VaultSetupForm
@@ -363,8 +363,8 @@
 				/>
 			{:else if $vaultSession.status === 'error'}
 				<section class="card card--pad wide" aria-labelledby="access-title">
-					<p class="eyebrow">Vault access</p>
-					<h1 class="h1 mt-10" id="access-title">We could not open your Vault.</h1>
+					<p class="eyebrow">Tandem access</p>
+					<h1 class="h1 mt-10" id="access-title">We could not open your vault.</h1>
 					<p class="lead mt-10">{$vaultSession.error ?? 'Please try again.'}</p>
 
 					<div class="notice mt-14">
@@ -415,7 +415,7 @@
 				</div>
 			{:else if $vaultData.status === 'error'}
 				<section class="card card--pad narrow" aria-labelledby="data-title">
-					<p class="eyebrow">Vault records</p>
+					<p class="eyebrow">Tandem records</p>
 					<h1 class="h1 mt-10" id="data-title">We could not load your records.</h1>
 					<p class="lead mt-10">{$vaultData.error ?? 'Please try again.'}</p>
 					<div class="grid-2 mt-14">
@@ -441,11 +441,11 @@
 	     session, and data states lands here with the live state shown, so a
 	     blank screen can never hide a problem again. -->
 	<section class="card card--pad narrow" aria-labelledby="stuck-title">
-		<p class="eyebrow">Vault startup</p>
-		<h1 class="h1 mt-10" id="stuck-title">Your Vault did not finish starting.</h1>
+		<p class="eyebrow">Tandem startup</p>
+		<h1 class="h1 mt-10" id="stuck-title">Tandem did not finish starting.</h1>
 		<p class="lead mt-10">
 			{startupError ??
-				'Vault could not reach a usable state on this device. Try again, and if it repeats, sign out and back in.'}
+				'Tandem could not reach a usable state on this device. Try again, and if it repeats, sign out and back in.'}
 		</p>
 		<dl class="diagnostics mt-14">
 			<div><dt>Session</dt><dd>{$vaultSession.status}</dd></div>

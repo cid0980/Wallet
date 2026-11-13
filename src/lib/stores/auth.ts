@@ -163,7 +163,7 @@ async function applyUser(user: User | null, notice: string | null): Promise<void
 			user: null,
 			email: null,
 			error:
-				'This account has no email address, so Vault cannot match it to the shared vault. Delete it in Firebase Console → Authentication → Users and create it again with an email and password.',
+				'This account has no email address, so Tandem cannot match it to the shared vault. Delete it in Firebase Console → Authentication → Users and create it again with an email and password.',
 			notice: null,
 			diagnostic: formatInspection(inspection)
 		});
@@ -411,7 +411,7 @@ export async function signOutOfVault(mode: SignOutMode = 'keep'): Promise<void> 
 	} catch (error) {
 		console.info('[vault:auth] local data clear failed', (error as Partial<FirebaseError>)?.code);
 		parkLocalDataNotice(
-			'Signed out. The offline copy could not be removed — close any other Vault tabs, sign in again, and use “Sign out and clear local data”, or clear this site’s data in your browser settings.'
+			'Signed out. The offline copy could not be removed — close any other Tandem tabs, sign in again, and use “Sign out and clear local data”, or clear this site’s data in your browser settings.'
 		);
 	}
 
