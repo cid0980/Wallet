@@ -422,9 +422,65 @@
 		headerCondensed = window.scrollY > 24;
 	}
 
-	function chooseSection(id: MainTab): void {
+	/**
+	 * Picking a section grows the new page out of the bubble that was chosen,
+	 * so the change of place is visible rather than instant. The circle is
+	 * measured while the ring is still open, then replayed over the content.
+	 */
+	type RevealSpot = { x: number; y: number; radius: number };
+
+	function measureReveal(source: Element): RevealSpot | null {
+		const content = document.querySelector<HTMLElement>('.shell__content');
+
+		if (!content) {
+			return null;
+		}
+
+		const bubble = source.getBoundingClientRect();
+		const box = content.getBoundingClientRect();
+
+		if (!box.width || !box.height) {
+			return null;
+		}
+
+		const x = bubble.left + bubble.width / 2 - box.left;
+		const y = bubble.top + bubble.height / 2 - box.top;
+
+		// Far enough to cover the furthest corner of the page.
+		const radius = Math.hypot(Math.max(x, box.width - x), Math.max(y, box.height - y)) + 48;
+
+		return { x, y, radius };
+	}
+
+	function playReveal(spot: RevealSpot): void {
+		const content = document.querySelector<HTMLElement>('.shell__content');
+
+		if (!content || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			return;
+		}
+
+		content.style.setProperty('--reveal-x', `${spot.x}px`);
+		content.style.setProperty('--reveal-y', `${spot.y}px`);
+		content.style.setProperty('--reveal-r', `${spot.radius}px`);
+
+		content.classList.remove('is-revealing');
+		void content.offsetWidth; // restart the animation if it is already running
+		content.classList.add('is-revealing');
+
+		window.setTimeout(() => content.classList.remove('is-revealing'), 520);
+	}
+
+	function chooseSection(id: MainTab, source?: Element | null): void {
+		const bubble =
+			source instanceof Element ? source : document.querySelector(`.dial__item[data-section="${id}"]`);
+		const spot = bubble ? measureReveal(bubble) : null;
+
 		dialOpen = false;
 		switchTab(id);
+
+		if (spot) {
+			void tick().then(() => playReveal(spot));
+		}
 	}
 
 	/**
@@ -1848,12 +1904,13 @@
 					class="dial__item"
 					class:is-on={activeTab === item.id}
 					class:is-aimed={swipeTarget === item.id}
+					data-section={item.id}
 					style={`--a: ${item.angle}deg; --i: ${index}`}
 					type="button"
 					aria-current={activeTab === item.id}
 					aria-label={item.label}
 					tabindex={dialOpen ? 0 : -1}
-					onclick={() => chooseSection(item.id)}
+					onclick={(event) => chooseSection(item.id, event.currentTarget)}
 				>
 					<Icon name={item.icon} size={19} />
 				</button>
