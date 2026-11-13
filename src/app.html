@@ -5,12 +5,11 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="color-scheme" content="light dark" />
 		<!--
-			No brand colour here on purpose: the status bar and the navigation bar
-			should read as the app itself, so the value always equals the page
-			background. The script below and $lib/stores/theme keep it in step with
-			the light/dark choice.
+			Deliberately no theme-color and no manifest theme colour: any colour we
+			declare is used to tint the phone's status bar and navigation bar, and
+			it never matches both themes at once. With nothing declared the bars
+			stay the system's own, which is what every other app on the phone does.
 		-->
-		<meta name="theme-color" content="#f5f7f6" />
 		<script>
 			// Runs before first paint so a dark phone never flashes white.
 			try {
@@ -21,8 +20,6 @@
 				var root = document.documentElement;
 				root.dataset.theme = dark ? 'dark' : 'light';
 				root.style.colorScheme = dark ? 'dark' : 'light';
-				var chrome = document.querySelector('meta[name="theme-color"]');
-				if (chrome) chrome.setAttribute('content', dark ? '#0e1210' : '#f5f7f6');
 			} catch (error) {
 				/* a browser without storage just gets the light default */
 			}

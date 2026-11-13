@@ -5,9 +5,9 @@
  * device on purpose — the vault itself stays theme-free, so two people can read
  * the same records on differently-lit phones.
  *
- * The choice is painted onto <html data-theme> and the browser chrome
- * (theme-color) is kept in step, so the status and navigation bars never carry
- * a colour of their own.
+ * The choice is painted onto <html data-theme>, and that is all: the app
+ * declares no theme colour anywhere, so the phone's status and navigation bars
+ * stay the system's own instead of being tinted.
  */
 import { get, writable } from 'svelte/store';
 
@@ -15,12 +15,6 @@ export type ThemePref = 'auto' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
 export const THEME_KEY = 'vault.theme';
-
-/** Kept in sync with --bg in app.css: the chrome should read as part of the page. */
-const CHROME_COLOR: Record<ResolvedTheme, string> = {
-	light: '#f5f7f6',
-	dark: '#0e1210'
-};
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
@@ -48,15 +42,13 @@ export function resolveTheme(pref: ThemePref): ResolvedTheme {
 	return systemQuery()?.matches ? 'dark' : 'light';
 }
 
-/** Put the resolved theme on the document and on the browser chrome. */
+/** Put the resolved theme on the document. */
 function paint(pref: ThemePref): ResolvedTheme {
 	const resolved = resolveTheme(pref);
 	if (typeof document === 'undefined') return resolved;
 	const root = document.documentElement;
 	root.dataset.theme = resolved;
 	root.style.colorScheme = resolved;
-	const meta = document.querySelector('meta[name="theme-color"]');
-	if (meta) meta.setAttribute('content', CHROME_COLOR[resolved]);
 	return resolved;
 }
 

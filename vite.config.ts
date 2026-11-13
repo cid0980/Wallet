@@ -11,36 +11,11 @@ export default defineConfig({
 			devOptions: {
 				enabled: false
 			},
-			manifest: {
-				name: 'Vault — Shared money tracker',
-				short_name: 'Vault',
-				description: 'A private shared tracker for client payments, expenses, and project balances.',
-				id: '/',
-				start_url: '/',
-				display: 'standalone',
-				// Both match the page background: the installed app should not put a
-				// green bar above and below its own screen.
-				background_color: '#f5f7f6',
-				theme_color: '#f5f7f6',
-				icons: [
-					{
-						src: '/icons/vault-192.png',
-						sizes: '192x192',
-						type: 'image/png'
-					},
-					{
-						src: '/icons/vault-512.png',
-						sizes: '512x512',
-						type: 'image/png'
-					},
-					{
-						src: '/icons/vault-maskable-512.png',
-						sizes: '512x512',
-						type: 'image/png',
-						purpose: 'maskable'
-					}
-				]
-			},
+			// The web app manifest is hand-written in static/manifest.webmanifest so
+			// it can omit theme_color: this plugin falls back to its own default
+			// (#42b883) whenever the key is absent, and any theme colour we declare
+			// is what tints the status and navigation bars of the installed app.
+			manifest: false,
 			workbox: {
 				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,webmanifest}'],
 				additionalManifestEntries: [{ url: '/200.html', revision: null }],
