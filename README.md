@@ -117,9 +117,42 @@ Run the included tests with:
 npm run test:rules
 ```
 
-The test suite covers initial Vault creation, verified/unverified/member/non-member boundaries, constrained member discovery, client and project access, valid payment batches, aggregate manipulation attempts, malformed deltas, payment edits/deletes, spending tags, and immutable history.
+The test suite covers initial Vault creation, verified/unverified/member/non-member boundaries, constrained member discovery, client and project access, valid payment batches, aggregate manipulation attempts, malformed deltas, payment edits/deletes, spending tags, payment tags (including legacy untagged payments and malformed tag lists), and immutable history.
 
 > **Migration/deployment order matters.** A GitHub push or Vercel deployment does **not** publish Firestore rules. Deploy the web app first, have both partners sign in and complete email verification, and only then publish this repository's `firestore.rules` in Firebase Console (or run `npm run firestore:rules:deploy` with an authorized Firebase CLI login). Publishing the verified-email rules before existing members verify will temporarily deny their Firestore access until they complete verification in the updated app.
+
+## Tags: spending and income
+
+Tags run across **both** money tabs. An expense requires one to five tags; a
+payment may carry none, because received money is not always categorised.
+
+- **Create while recording.** Both composers have a “New tag” box next to the
+  chips. A tag typed there is selected on the record immediately and written to
+  the vault's shared list in the background (identical to More → Settings), so
+  the other partner sees it and it survives an abandoned form. `tags` is
+  therefore optional in the payment document, and the app deletes the field
+  rather than storing an empty list when the last tag is removed.
+- **Every tag is reachable.** The picker and the filter bar are built from the
+  shared list *plus* the tags present on existing records. A tag removed in
+  Settings survives on the records that already use it — and stays selectable
+  and filterable instead of vanishing.
+- **Filtering with a range.** Each money tab has a filter bar: tap a tag to
+  narrow the list, then choose This month (default), Last 30 days, This FY
+  (1 April – 31 March), All time, or an explicit From/To pair. The summary card
+  above the list shows the total, the record count and the per-partner split for
+  exactly what is on screen — it is a report, not a stored total.
+- Tapping a tag pill on a row applies the same filter, and the money CSV export
+  includes a Tags column on both tabs.
+
+Tags are labels only. They never touch `vaults/{id}.totals`, and the aggregate
+invariants are unchanged.
+
+> **Deploy the rules before the app for this change.** A newly tagged *payment*
+> is rejected by the previously published rule set, which enumerated the payment
+> fields. `firestore.rules` in this repository accepts `tags` optionally, so it is
+> backward compatible with the deployed app: publish it first
+> (`npm run firestore:rules:deploy`), then deploy the web app. Untagged payments
+> keep working either way, so the window is harmless.
 
 ## PWA and offline behavior
 

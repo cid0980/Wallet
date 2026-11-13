@@ -490,6 +490,89 @@ test('still accepts a money batch after spending tags exist on the vault', async
 	await assertSucceeds(addValidPayment(aliceDb));
 });
 
+test('accepts a payment tagged the same way an expense is', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	const batch = writeBatch(aliceDb);
+	const delta = paymentDelta(100_00);
+	batch.set(doc(aliceDb, 'vaults', vaultId, 'payments', 'payment-tagged-open'), {
+		...paymentFields('mutation-tagged-open'),
+		// The field is added after the record was first written in this suite,
+		// so a fresh document carrying it is the case that matters most.
+		tags: ['Retainer', 'Design']
+	});
+	batch.set(
+		doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-tagged-open'),
+		mutationFields('mutation-tagged-open', 'payment-create', 'payment-tagged-open', delta)
+	);
+	updateVaultForDelta(batch, aliceDb, 'mutation-tagged-open', delta);
+	await assertSucceeds(batch.commit());
+
+	const stored = await getDoc(doc(aliceDb, 'vaults', vaultId, 'payments', 'payment-tagged-open'));
+	if (!stored.exists() || stored.data().tags.length !== 2) {
+		throw new Error('Expected the tagged payment to keep both tags.');
+	}
+});
+
+test('keeps an untagged payment writable, then allows tagging and clearing it', async () => {
+	const aliceDb = memberDb(aliceEmail);
+	// A record written before payments could be tagged: no `tags` key at all.
+	await assertSucceeds(addValidPayment(aliceDb));
+
+	const tagBatch = writeBatch(aliceDb);
+	const tagDelta = paymentDelta(0);
+	tagBatch.update(doc(aliceDb, 'vaults', vaultId, 'payments', 'payment-1'), {
+		tags: ['Design'],
+		updatedAt: serverTimestamp(),
+		updatedBy: aliceEmail,
+		lastMutationId: 'mutation-tag'
+	});
+	tagBatch.set(
+		doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-tag'),
+		mutationFields('mutation-tag', 'payment-update', 'payment-1', tagDelta)
+	);
+	updateVaultForDelta(tagBatch, aliceDb, 'mutation-tag', tagDelta);
+	await assertSucceeds(tagBatch.commit());
+
+	// Removing every tag clears the field rather than storing an empty list.
+	const clearBatch = writeBatch(aliceDb);
+	clearBatch.update(doc(aliceDb, 'vaults', vaultId, 'payments', 'payment-1'), {
+		tags: deleteField(),
+		updatedAt: serverTimestamp(),
+		updatedBy: aliceEmail,
+		lastMutationId: 'mutation-untag'
+	});
+	clearBatch.set(
+		doc(aliceDb, 'vaults', vaultId, 'mutations', 'mutation-untag'),
+		mutationFields('mutation-untag', 'payment-update', 'payment-1', tagDelta)
+	);
+	updateVaultForDelta(clearBatch, aliceDb, 'mutation-untag', tagDelta);
+	await assertSucceeds(clearBatch.commit());
+});
+
+test('refuses malformed payment tags inside an otherwise valid batch', async () => {
+	const aliceDb = memberDb(aliceEmail);
+
+	async function paymentWithTags(tags, paymentId, mutationId) {
+		const batch = writeBatch(aliceDb);
+		const delta = paymentDelta(100_00);
+		batch.set(doc(aliceDb, 'vaults', vaultId, 'payments', paymentId), {
+			...paymentFields(mutationId),
+			tags
+		});
+		batch.set(
+			doc(aliceDb, 'vaults', vaultId, 'mutations', mutationId),
+			mutationFields(mutationId, 'payment-create', paymentId, delta)
+		);
+		updateVaultForDelta(batch, aliceDb, mutationId, delta);
+		return batch.commit();
+	}
+
+	await assertFails(paymentWithTags(['a', 'b', 'c', 'd', 'e', 'f'], 'payment-many', 'mutation-many'));
+	await assertFails(paymentWithTags([], 'payment-empty', 'mutation-empty'));
+	await assertFails(paymentWithTags('Design', 'payment-string', 'mutation-string'));
+	await assertFails(paymentWithTags([42], 'payment-number', 'mutation-number'));
+});
+
 test('allows members to run projects and edit the estimated price', async () => {
 	const aliceDb = memberDb(aliceEmail);
 	const eveDb = nonMemberDb(eveEmail);

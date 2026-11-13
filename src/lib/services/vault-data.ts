@@ -37,7 +37,7 @@ import type {
 	VaultSummary,
 	VaultTotals
 } from '$lib/types/vault';
-import { MAX_EXPENSE_TAGS, MAX_TAG_LENGTH, MAX_VAULT_TAGS } from '$lib/types/vault';
+import { MAX_EXPENSE_TAGS, MAX_PAYMENT_TAGS, MAX_TAG_LENGTH, MAX_VAULT_TAGS } from '$lib/types/vault';
 import { formatPaise, isValidPaise } from '$lib/utils/money';
 import { isDateKey } from '$lib/utils/dates';
 
@@ -155,7 +155,13 @@ function assertActorEmail(actorEmail: string): string {
 	return email;
 }
 
-function cleanTags(tags: string[], label: string, maximum: number, verb = 'Pick'): string[] {
+function cleanTags(
+	tags: string[],
+	label: string,
+	maximum: number,
+	verb = 'Pick',
+	required = true
+): string[] {
 	const seen = new Set<string>();
 	const result: string[] = [];
 
@@ -175,7 +181,11 @@ function cleanTags(tags: string[], label: string, maximum: number, verb = 'Pick'
 	}
 
 	if (!result.length) {
-		throw new Error(`${verb} at least one ${label}.`);
+		if (required) {
+			throw new Error(`${verb} at least one ${label}.`);
+		}
+
+		return [];
 	}
 
 	if (result.length > maximum) {
@@ -244,6 +254,8 @@ function cleanPaymentInput(input: PaymentInput): PaymentInput {
 		projectName: projectId ? projectName : null,
 		amountPaise: assertPositivePaise(input.amountPaise),
 		partner: assertPartner(input.partner),
+		// Optional: received money may go uncategorised, unlike a spend.
+		tags: cleanTags(input.tags ?? [], 'tag', MAX_PAYMENT_TAGS, 'Pick', false),
 		occurredOn: assertDate(input.occurredOn),
 		note: assertText(input.note, 'a note')
 	};
@@ -281,6 +293,19 @@ function cleanProjectInput(input: ProjectInput): ProjectInput {
 	};
 }
 
+/**
+ * Payments keep `tags` absent when empty. Two reasons: an untagged payment then
+ * stays writable against a rule set published before payments could be tagged,
+ * and Firestore never stores an empty array we would have to explain.
+ */
+function paymentTagFields(tags: string[], hadTags: boolean): Record<string, unknown> {
+	if (tags.length) {
+		return { tags };
+	}
+
+	return hadTags ? { tags: deleteField() } : {};
+}
+
 function ensureVaultTotals(vault: VaultSummary): VaultTotals {
 	const totals = vault.totals;
 	const values = [
@@ -301,7 +326,9 @@ function ensureVaultTotals(vault: VaultSummary): VaultTotals {
 
 function mutationSummary(kind: MutationKind, amountPaise: number, clientName: string | null, tags?: string[]): string {
 	const amount = formatPaise(amountPaise);
-	const subject = clientName ? ` · ${clientName}` : tags?.length ? ` · ${tags.join(' / ')}` : '';
+	const who = clientName ? ` · ${clientName}` : '';
+	const what = tags?.length ? ` · ${tags.join(' / ')}` : '';
+	const subject = `${who}${what}`;
 
 	switch (kind) {
 		case 'payment-create':
@@ -413,6 +440,8 @@ export function toPaymentRecord(snapshot: QueryDocumentSnapshot<DocumentData>): 
 		projectName: typeof data.projectName === 'string' && data.projectName ? data.projectName : null,
 		amountPaise: asPaise(data.amountPaise),
 		partner: asPartner(data.partner),
+		// Payments were untagged before this field existed: absent means none.
+		tags: asTags(data.tags, MAX_PAYMENT_TAGS),
 		occurredOn: asString(data.occurredOn),
 		note: asString(data.note),
 		createdAt: asDate(data.createdAt),
@@ -712,8 +741,11 @@ export async function createPayment(vault: VaultSummary, input: PaymentInput, ac
 	const delta = paymentDelta(null, clean);
 	const batch = writeBatch(db);
 
+	const { tags, ...paymentCore } = clean;
+
 	batch.set(paymentRef, {
-		...clean,
+		...paymentCore,
+		...paymentTagFields(tags, false),
 		createdAt: serverTimestamp(),
 		updatedAt: serverTimestamp(),
 		createdBy: actor,
@@ -729,7 +761,7 @@ export async function createPayment(vault: VaultSummary, input: PaymentInput, ac
 		paymentRef.id,
 		delta,
 		actor,
-		mutationSummary('payment-create', clean.amountPaise, clean.clientName)
+		mutationSummary('payment-create', clean.amountPaise, clean.clientName, tags)
 	);
 	updateVaultTotals(batch, vault.id, mutationId, delta);
 	await batch.commit();
@@ -749,9 +781,11 @@ export async function updatePayment(
 	const delta = paymentDelta(payment, clean);
 	const batch = writeBatch(db);
 	const paymentRef = doc(db, 'vaults', vault.id, 'payments', payment.id);
+	const { tags, ...paymentCore } = clean;
 
 	batch.update(paymentRef, {
-		...clean,
+		...paymentCore,
+		...paymentTagFields(tags, (payment.tags ?? []).length > 0),
 		updatedAt: serverTimestamp(),
 		updatedBy: actor,
 		lastMutationId: mutationId
@@ -765,7 +799,7 @@ export async function updatePayment(
 		payment.id,
 		delta,
 		actor,
-		mutationSummary('payment-update', clean.amountPaise, clean.clientName)
+		mutationSummary('payment-update', clean.amountPaise, clean.clientName, tags)
 	);
 	updateVaultTotals(batch, vault.id, mutationId, delta);
 	await batch.commit();
@@ -789,7 +823,7 @@ export async function deletePayment(vault: VaultSummary, payment: PaymentRecord,
 		payment.id,
 		delta,
 		actor,
-		mutationSummary('payment-delete', payment.amountPaise, payment.clientName)
+		mutationSummary('payment-delete', payment.amountPaise, payment.clientName, payment.tags)
 	);
 	updateVaultTotals(batch, vault.id, mutationId, delta);
 	await batch.commit();

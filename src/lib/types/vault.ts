@@ -13,6 +13,8 @@ export const defaultSpendingTags = [
 
 export const MAX_TAG_LENGTH = 40;
 export const MAX_EXPENSE_TAGS = 5;
+/** Payments carry optional tags; the same five-slot ceiling keeps rules simple. */
+export const MAX_PAYMENT_TAGS = 5;
 export const MAX_VAULT_TAGS = 12;
 
 export type MoneyRecordType = 'payment' | 'expense';
@@ -112,6 +114,8 @@ export interface PaymentRecord {
 	projectName: string | null;
 	amountPaise: number;
 	partner: PartnerKey;
+	/** Optional: money in is not always categorised. Empty means untagged. */
+	tags: string[];
 	occurredOn: string;
 	note: string;
 	createdAt: Date | null;
@@ -169,6 +173,7 @@ export interface PaymentInput {
 	projectName: string | null;
 	amountPaise: number;
 	partner: PartnerKey;
+	tags: string[];
 	occurredOn: string;
 	note: string;
 }

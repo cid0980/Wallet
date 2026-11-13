@@ -2041,3 +2041,52 @@ code {
 .edit-actions .btn--sm {
 	flex: 1;
 }
+
+/* Tag chips attached to a payment or expense row: the same chip doubles as the
+   filter control, so tapping a tag narrows the list to it. */
+.row__tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	margin-top: 6px;
+}
+
+.row__tags--title {
+	margin-top: 0;
+}
+
+.tag-pill {
+	padding: 3px 9px;
+	border: 1px solid var(--line-2);
+	border-radius: var(--r-pill);
+	background: var(--surface-2);
+	color: var(--ink-2);
+	font: inherit;
+	font-size: 0.74rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tag-pill--title {
+	font-size: 0.95rem;
+	font-weight: 650;
+	padding: 2px 8px;
+}
+
+.tag-pill:hover {
+	border-color: var(--brand);
+	color: var(--brand-ink);
+}
+
+.tag-pill--on {
+	background: var(--brand-soft);
+	border-color: var(--brand);
+	color: var(--brand-ink);
+}
+
+.tag-pill:focus-visible {
+	outline: none;
+	box-shadow: var(--focus);
+}

@@ -89,9 +89,9 @@ service cloud.firestore {
       return value is string && value.size() >= 1 && value.size() <= 40;
     }
 
-    // Rules have no loops, so each slot is checked explicitly. The expense path
-    // (money batches, the hot path) stays at 5 slots; only the vault tag list
-    // pays for 12.
+    // Rules have no loops, so each slot is checked explicitly. The money paths
+    // (the hot path) stay at 5 slots each; only the vault tag list pays for 12.
+    // Expenses require this list; payments may omit it and stay untagged.
     function isValidExpenseTags(value) {
       return value is list
         && value.size() >= 1
@@ -184,6 +184,10 @@ service cloud.firestore {
         && isValidNonEmptyText(client.updatedBy, 320);
     }
 
+    // Payments may be tagged like expenses, but the field is optional: money
+    // received before payments could be tagged carries no `tags` key at all, and
+    // an untagged payment is legitimate. When present it must be a valid list,
+    // so a client cannot smuggle arbitrary shapes (or oversized strings) in.
     function isValidPayment(payment) {
       return payment is map
         && payment.keys().hasAll([
@@ -192,7 +196,7 @@ service cloud.firestore {
         ])
         && payment.keys().hasOnly([
           'clientId', 'clientName', 'projectId', 'projectName', 'amountPaise', 'partner', 'occurredOn', 'note',
-          'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lastMutationId'
+          'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'lastMutationId', 'tags'
         ])
         && isValidNonEmptyText(payment.clientId, 160)
         && isValidNonEmptyText(payment.clientName, 120)
@@ -201,6 +205,7 @@ service cloud.firestore {
         && payment.amountPaise is int
         && payment.amountPaise > 0
         && (payment.partner == 'a' || payment.partner == 'b')
+        && (!('tags' in payment) || isValidExpenseTags(payment.tags))
         && isValidDateKey(payment.occurredOn)
         && isValidText(payment.note, 1000)
         && payment.createdAt is timestamp

@@ -6,6 +6,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Progress from '$lib/components/ui/Progress.svelte';
 	import Sheet from '$lib/components/ui/Sheet.svelte';
+	import TagFilterBar from '$lib/components/ui/TagFilterBar.svelte';
 	import ToastMessage from '$lib/components/ui/Toast.svelte';
 	import {
 		createClient,
@@ -35,7 +36,7 @@
 		VaultMutation,
 		VaultSummary
 	} from '$lib/types/vault';
-	import { MAX_EXPENSE_TAGS, MAX_VAULT_TAGS } from '$lib/types/vault';
+	import { MAX_EXPENSE_TAGS, MAX_PAYMENT_TAGS, MAX_TAG_LENGTH, MAX_VAULT_TAGS } from '$lib/types/vault';
 	import {
 		formatDateKey,
 		formatDateTime,
@@ -50,6 +51,17 @@
 		projectPaymentStatus
 	} from '$lib/utils/project-payment-status';
 	import { projectIdForClient, projectsForClient } from '$lib/utils/project-picker';
+	import {
+		buildTagVocabulary,
+		filterTaggedRecords,
+		hasTag,
+		inRange,
+		presetRange,
+		rangeLabel,
+		summarizeRecords,
+		usedTags,
+		type RangePreset
+	} from '$lib/utils/tag-filter';
 
 	type MainTab = 'home' | 'clients' | 'projects' | 'payments' | 'expenses' | 'more';
 	type Composer = 'none' | 'client' | 'project' | 'payment' | 'expense';
@@ -57,6 +69,10 @@
 	type DateMode = 'today' | 'yesterday' | 'custom';
 
 	type ChipOption = { value: string; label: string; initial?: string };
+	/** Which money tab a filter or composer belongs to. */
+	type MoneyTab = 'payments' | 'expenses';
+	/** A tapped tag plus the date window it is counted over. */
+	type TagFilter = { tag: string | null; preset: RangePreset; from: string; to: string };
 	type Toast = { tone: 'ok' | 'error'; text: string };
 	type Confirmation = { title: string; message: string; confirmLabel: string; run: () => Promise<void> };
 
@@ -82,6 +98,11 @@
 	let clientNotes = '';
 
 	let editingPayment: PaymentRecord | null = null;
+	let paymentTags: string[] = [];
+	let newPaymentTag = '';
+	let newExpenseTag = '';
+	let paymentFilter: TagFilter = defaultFilter();
+	let expenseFilter: TagFilter = defaultFilter();
 	let paymentClientId = '';
 	let paymentAmount = '';
 	let paymentPartner: PartnerKey = 'a';
@@ -142,19 +163,6 @@
 
 	$: vaultTagOptions = vault.tags.map((tag) => ({ value: tag, label: tag }));
 
-	$: tagOptions = (() => {
-		const seen = new Set<string>();
-		const list: string[] = [];
-		for (const tag of [...vault.tags, ...expenseTags]) {
-			const key = tag.toLowerCase();
-			if (!seen.has(key)) {
-				seen.add(key);
-				list.push(tag);
-			}
-		}
-		return list;
-	})();
-
 	$: activeProjects = $vaultData.projects.filter((project) => project.status === 'active');
 	$: paymentClientProjects = projectsForClient($vaultData.projects, paymentClientId);
 	$: selectedPaymentProject = paymentClientProjects.find((project) => project.id === paymentProjectId) ?? null;
@@ -186,15 +194,58 @@
 
 	$: needle = query.trim().toLowerCase();
 	$: filteredClients = needle ? shownClients.filter((client) => matches(needle, client.name, client.contact, client.notes)) : shownClients;
-	$: filteredPayments = $vaultData.payments.filter((payment) =>
-		(!paymentProjectFilter || payment.projectId === paymentProjectFilter.id) &&
-		(!needle || matches(needle, payment.clientName, payment.projectName, payment.note, partnerName(payment.partner), formatPaise(payment.amountPaise)))
+
+	// Every tag the vault knows about, including ones that exist only on older
+	// records. Built from the shared list plus the records themselves so a tag
+	// you created once can always be found again.
+	$: tagVocabulary = buildTagVocabulary(vault.tags, [
+		...$vaultData.payments,
+		...$vaultData.expenses,
+		{ tags: paymentTags },
+		{ tags: expenseTags }
+	]);
+	$: composerTagOptions = tagVocabulary.map((tag) => ({ value: tag, label: tag }));
+	$: paymentTagsUsed = usedTags($vaultData.payments, vault.tags);
+	$: expenseTagsUsed = usedTags($vaultData.expenses, vault.tags);
+	$: paymentRange = { from: paymentFilter.from, to: paymentFilter.to };
+	$: expenseRange = { from: expenseFilter.from, to: expenseFilter.to };
+
+	$: filteredPayments = filterTaggedRecords(
+		$vaultData.payments.filter(
+			(payment) =>
+				(!paymentProjectFilter || payment.projectId === paymentProjectFilter.id) &&
+				(!needle ||
+					matches(
+						needle,
+						payment.clientName,
+						payment.projectName,
+						payment.note,
+						payment.tags.join(' '),
+						partnerName(payment.partner),
+						formatPaise(payment.amountPaise)
+					))
+		),
+		{ tag: paymentFilter.tag, range: paymentRange }
 	);
-	$: filteredExpenses = needle
-		? $vaultData.expenses.filter((expense) =>
-				matches(needle, expense.tags.join(' '), expense.clientName, expense.note, partnerName(expense.partner), formatPaise(expense.amountPaise))
-			)
-		: $vaultData.expenses;
+	$: filteredExpenses = filterTaggedRecords(
+		$vaultData.expenses.filter(
+			(expense) =>
+				!needle ||
+				matches(
+					needle,
+					expense.tags.join(' '),
+					expense.clientName,
+					expense.note,
+					partnerName(expense.partner),
+					formatPaise(expense.amountPaise)
+				)
+		),
+		{ tag: expenseFilter.tag, range: expenseRange }
+	);
+	$: paymentSummary = summarizeRecords(filteredPayments);
+	$: expenseSummary = summarizeRecords(filteredExpenses);
+	$: paymentFilterActive = paymentFilter.tag !== null || paymentFilter.preset !== 'month' || Boolean(paymentProjectFilter);
+	$: expenseFilterActive = expenseFilter.tag !== null || expenseFilter.preset !== 'month';
 	$: filteredProjects = needle
 		? $vaultData.projects.filter((project) => matches(needle, project.name, project.clientName, project.note))
 		: $vaultData.projects;
@@ -329,6 +380,8 @@
 		paymentDate = payment?.occurredOn ?? todayDateKey();
 		paymentDateMode = dateModeFor(paymentDate);
 		paymentNote = payment?.note ?? '';
+		paymentTags = payment?.tags?.length ? [...payment.tags] : [];
+		newPaymentTag = '';
 		paymentClientQuery = '';
 		composer = 'payment';
 	}
@@ -361,6 +414,7 @@
 		expenseDate = expense?.occurredOn ?? todayDateKey();
 		expenseDateMode = dateModeFor(expenseDate);
 		expenseNote = expense?.note ?? '';
+		newExpenseTag = '';
 		expenseClientQuery = '';
 		composer = 'expense';
 	}
@@ -437,6 +491,7 @@
 				projectName: selectedPaymentProject?.name ?? null,
 				amountPaise: parseMoneyToPaise(paymentAmount),
 				partner: paymentPartner,
+				tags: paymentTags,
 				occurredOn: paymentDate,
 				note: paymentNote
 			};
@@ -569,13 +624,153 @@
 		};
 	}
 
-	function toggleExpenseTag(tag: string): void {
-		if (expenseTags.includes(tag)) {
-			expenseTags = expenseTags.filter((entry) => entry !== tag);
-		} else if (expenseTags.length >= MAX_EXPENSE_TAGS) {
-			say(`Choose at most ${MAX_EXPENSE_TAGS} tags.`, 'error');
+	const RANGE_PRESETS: { value: RangePreset; label: string }[] = [
+		{ value: 'month', label: 'This month' },
+		{ value: 'last30', label: 'Last 30 days' },
+		{ value: 'fy', label: 'This FY' },
+		{ value: 'all', label: 'All time' },
+		{ value: 'custom', label: 'Dates…' }
+	];
+
+	/** Every tab opens on the current month, which is the useful default. */
+	function defaultFilter(): TagFilter {
+		const range = presetRange('month');
+		return { tag: null, preset: 'month', from: range.from, to: range.to };
+	}
+
+	function tagFilterFor(tab: MoneyTab): TagFilter {
+		return tab === 'payments' ? paymentFilter : expenseFilter;
+	}
+
+	function setTagFilter(tab: MoneyTab, tag: string | null): void {
+		const current = tagFilterFor(tab);
+		const next = { ...current, tag };
+		if (tab === 'payments') {
+			paymentFilter = next;
 		} else {
-			expenseTags = [...expenseTags, tag];
+			expenseFilter = next;
+		}
+	}
+
+	/** Tapping the same chip twice clears it, so a filter is never a trap. */
+	function toggleTagFilter(tab: MoneyTab, tag: string): void {
+		setTagFilter(tab, tagFilterFor(tab).tag === tag ? null : tag);
+	}
+
+	function chooseRangePreset(tab: MoneyTab, preset: RangePreset): void {
+		const current = tagFilterFor(tab);
+		// "Dates…" keeps whatever window is showing as a starting point.
+		const range = preset === 'custom' ? { from: current.from, to: current.to } : presetRange(preset);
+		const next = { ...current, preset, ...range };
+		if (tab === 'payments') {
+			paymentFilter = next;
+		} else {
+			expenseFilter = next;
+		}
+	}
+
+	function setRangeBound(tab: MoneyTab, bound: 'from' | 'to', value: string): void {
+		const current = tagFilterFor(tab);
+		const next = { ...current, preset: 'custom' as RangePreset, [bound]: value };
+		if (tab === 'payments') {
+			paymentFilter = next;
+		} else {
+			expenseFilter = next;
+		}
+	}
+
+	function resetFilters(tab: MoneyTab): void {
+		if (tab === 'payments') {
+			paymentFilter = defaultFilter();
+			paymentProjectFilter = null;
+		} else {
+			expenseFilter = defaultFilter();
+		}
+	}
+
+	/**
+	 * Creates a tag while recording money, instead of sending you to Settings.
+	 * The tag is selected on the record immediately; the shared vocabulary is
+	 * written in the background the way Settings writes it, so both partners get
+	 * it, and the record still saves if that second write is refused.
+	 */
+	function addInlineTag(tab: MoneyTab): void {
+		const draft = tab === 'payments' ? newPaymentTag : newExpenseTag;
+		const tag = draft.trim().replace(/\s+/g, ' ').slice(0, MAX_TAG_LENGTH);
+		if (!tag) {
+			return;
+		}
+
+		const chosen = tagVocabulary.find((entry) => entry.toLowerCase() === tag.toLowerCase()) ?? tag;
+		const selected = tab === 'payments' ? paymentTags : expenseTags;
+		const maximum = tab === 'payments' ? MAX_PAYMENT_TAGS : MAX_EXPENSE_TAGS;
+
+		if (tab === 'payments') {
+			newPaymentTag = '';
+		} else {
+			newExpenseTag = '';
+		}
+
+		if (selected.some((entry) => entry.toLowerCase() === chosen.toLowerCase())) {
+			say(`“${chosen}” is already selected.`);
+			return;
+		}
+
+		if (selected.length >= maximum) {
+			say(`Use at most ${maximum} tags on one record.`, 'error');
+			return;
+		}
+
+		if (tab === 'payments') {
+			paymentTags = [...paymentTags, chosen];
+		} else {
+			expenseTags = [...expenseTags, chosen];
+		}
+
+		if (vault.tags.some((entry) => entry.toLowerCase() === chosen.toLowerCase())) {
+			say(`“${chosen}” selected.`);
+			return;
+		}
+
+		if (vault.tags.length >= MAX_VAULT_TAGS) {
+			say(`“${chosen}” applies to this record. The shared list is full (${MAX_VAULT_TAGS} tags), so it stays off the picker.`);
+			return;
+		}
+
+		void runAction(async () => {
+			await updateVaultTags(vault.id, [...vault.tags, chosen], user.email ?? '');
+			say(`“${chosen}” added to shared tags.`);
+		});
+	}
+
+	/** Enter inside the new-tag box adds the tag instead of saving the record. */
+	function newTagKeydown(event: KeyboardEvent, tab: MoneyTab): void {
+		if (event.key !== 'Enter') {
+			return;
+		}
+
+		event.preventDefault();
+		addInlineTag(tab);
+	}
+
+	/** Selects or clears a tag on the record being recorded. */
+	function toggleTag(tab: MoneyTab, tag: string): void {
+		const selected = tab === 'payments' ? paymentTags : expenseTags;
+		const maximum = tab === 'payments' ? MAX_PAYMENT_TAGS : MAX_EXPENSE_TAGS;
+		const key = tag.toLowerCase();
+		const isOn = selected.some((entry) => entry.toLowerCase() === key);
+
+		if (!isOn && selected.length >= maximum) {
+			say(`Choose at most ${maximum} tags.`, 'error');
+			return;
+		}
+
+		const next = isOn ? selected.filter((entry) => entry.toLowerCase() !== key) : [...selected, tag];
+
+		if (tab === 'payments') {
+			paymentTags = next;
+		} else {
+			expenseTags = next;
 		}
 	}
 
@@ -684,9 +879,10 @@
 	function exportPaymentsCsv(): void {
 		downloadCsv(
 			`vault-payments-${todayDateKey()}.csv`,
-			['Date', 'Client', 'Project', 'Received by', 'Amount (INR)', 'Note'],
+			['Date', 'Tags', 'Client', 'Project', 'Received by', 'Amount (INR)', 'Note'],
 			filteredPayments.map((payment) => [
 				payment.occurredOn,
+				payment.tags.join(' · '),
 				payment.clientName,
 				payment.projectName ?? '',
 				partnerName(payment.partner),
@@ -1077,6 +1273,25 @@
 				</button>
 			</section>
 
+			{#if $vaultData.payments.length}
+				<TagFilterBar
+					label="Filter payments"
+					tags={paymentTagsUsed}
+					filter={paymentFilter}
+					summary={paymentSummary}
+					partnerAName={vault.members.a.name}
+					partnerBName={vault.members.b.name}
+					unitLabel="payment"
+					totalLabel="Received"
+					presets={RANGE_PRESETS}
+					disabled={actionBusy}
+					onTag={(tag) => setTagFilter('payments', tag)}
+					onPreset={(preset) => chooseRangePreset('payments', preset)}
+					onBound={(bound, value) => setRangeBound('payments', bound, value)}
+					onReset={() => resetFilters('payments')}
+				/>
+			{/if}
+
 			{#if paymentProjectFilter}
 				<div class="payment-filter" role="status">
 					<span>Payments for <strong>{paymentProjectFilter.name}</strong></span>
@@ -1108,6 +1323,19 @@
 								<p class="row__meta">
 									{formatRelativeDate(payment.occurredOn)} · received by {partnerName(payment.partner)}{payment.projectName ? ` · ${payment.projectName}` : ''}
 								</p>
+								{#if payment.tags.length}
+									<div class="row__tags">
+										{#each payment.tags as tag (tag)}
+											<button
+												class="tag-pill"
+												class:tag-pill--on={paymentFilter.tag === tag}
+												type="button"
+												aria-label={`Show payments tagged ${tag}`}
+												onclick={() => setTagFilter('payments', paymentFilter.tag === tag ? null : tag)}
+											>{tag}</button>
+										{/each}
+									</div>
+								{/if}
 								{#if payment.note}<p class="row__note">{payment.note}</p>{/if}
 							</div>
 							<div class="row__side">
@@ -1126,6 +1354,8 @@
 				</div>
 			{:else if needle}
 				<EmptyState icon="search" title={`No payments match “${query}”`}><button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button></EmptyState>
+			{:else if $vaultData.payments.length}
+				<EmptyState icon="tag" title={paymentFilter.tag ? `Nothing tagged ${paymentFilter.tag} in this range` : 'Nothing in this date range'}><button class="btn btn--outline btn--sm" type="button" onclick={() => resetFilters('payments')}>Show this month</button></EmptyState>
 			{:else}
 				<EmptyState icon="money-in" title="No payments recorded" message="Record what a client paid, and the shared balance updates for both of you instantly."><button class="btn btn--primary btn--sm" type="button" onclick={() => openPaymentComposer()}>Record payment</button></EmptyState>
 			{/if}
@@ -1142,6 +1372,25 @@
 					<Icon name="plus" size={17} /> Add
 				</button>
 			</section>
+
+			{#if $vaultData.expenses.length}
+				<TagFilterBar
+					label="Filter expenses"
+					tags={expenseTagsUsed}
+					filter={expenseFilter}
+					summary={expenseSummary}
+					partnerAName={vault.members.a.name}
+					partnerBName={vault.members.b.name}
+					unitLabel="expense"
+					totalLabel="Spent"
+					presets={RANGE_PRESETS}
+					disabled={actionBusy}
+					onTag={(tag) => setTagFilter('expenses', tag)}
+					onPreset={(preset) => chooseRangePreset('expenses', preset)}
+					onBound={(bound, value) => setRangeBound('expenses', bound, value)}
+					onReset={() => resetFilters('expenses')}
+				/>
+			{/if}
 
 			{#if $vaultData.expenses.length > 4}
 				<label class="search mt-14">
@@ -1163,7 +1412,17 @@
 						<article class="row">
 							<span class="row__icon row__icon--out" aria-hidden="true"><Icon name="money-out" size={19} /></span>
 							<div class="row__body">
-								<p class="row__title">{expense.tags.join(' · ')}</p>
+								<div class="row__tags row__tags--title">
+									{#each expense.tags as tag (tag)}
+										<button
+											class="tag-pill tag-pill--title"
+											class:tag-pill--on={expenseFilter.tag === tag}
+											type="button"
+											aria-label={`Show expenses tagged ${tag}`}
+											onclick={() => setTagFilter('expenses', expenseFilter.tag === tag ? null : tag)}
+										>{tag}</button>
+									{/each}
+								</div>
 								<p class="row__meta">
 									{formatRelativeDate(expense.occurredOn)} · paid by {partnerName(expense.partner)}{expense.clientName ? ` · ${expense.clientName}` : ''}
 								</p>
@@ -1185,6 +1444,8 @@
 				</div>
 			{:else if needle}
 				<EmptyState icon="search" title={`No expenses match “${query}”`}><button class="btn btn--outline btn--sm" type="button" onclick={() => (query = '')}>Clear search</button></EmptyState>
+			{:else if $vaultData.expenses.length}
+				<EmptyState icon="tag" title={expenseFilter.tag ? `Nothing tagged ${expenseFilter.tag} in this range` : 'Nothing in this date range'}><button class="btn btn--outline btn--sm" type="button" onclick={() => resetFilters('expenses')}>Show this month</button></EmptyState>
 			{:else}
 				<EmptyState icon="money-out" title="No expenses recorded" message="Track what either of you paid out, so the profit split stays honest."><button class="btn btn--primary btn--sm" type="button" onclick={() => openExpenseComposer()}>Add expense</button></EmptyState>
 			{/if}
@@ -1398,6 +1659,35 @@
 						{/if}
 
 						<div class="field">
+							<span class="field__label">Tags <em class="field__optional">optional</em></span>
+							<ChipGroup
+								label="Tags for this payment"
+								options={composerTagOptions}
+								multiple
+								values={paymentTags}
+								maxSelected={MAX_PAYMENT_TAGS}
+								disabled={actionBusy}
+								onChange={(tag) => toggleTag('payments', tag)}
+							/>
+							<div class="tag-add">
+								<input
+									class="input"
+									bind:value={newPaymentTag}
+									maxlength={MAX_TAG_LENGTH}
+									placeholder="New tag, e.g. Retainer"
+									aria-label="New payment tag"
+									disabled={actionBusy}
+									onkeydown={(event) => newTagKeydown(event, 'payments')}
+								/>
+								<button class="btn btn--outline btn--sm" type="button" disabled={actionBusy || !newPaymentTag.trim()} onclick={() => addInlineTag('payments')}>Add</button>
+							</div>
+							<p class="hint" role="status">
+								{paymentTags.length} of {MAX_PAYMENT_TAGS} tags.
+								{paymentTags.length === MAX_PAYMENT_TAGS ? ' Remove one to choose another.' : ' Tag now, or leave it blank — money can be tagged later.'}
+							</p>
+						</div>
+
+						<div class="field">
 							<span class="field__label">Received by</span>
 							<ChipGroup label="Received by" options={partnerOptions} value={paymentPartner} disabled={actionBusy} onChange={(value) => (paymentPartner = value as PartnerKey)} />
 						</div>
@@ -1475,8 +1765,28 @@
 
 					<div class="field">
 						<span class="field__label">What it was for</span>
-						<ChipGroup label="Spending tags" options={tagOptions.map((tag) => ({ value: tag, label: tag }))} multiple values={expenseTags} maxSelected={MAX_EXPENSE_TAGS} disabled={actionBusy} onChange={toggleExpenseTag} />
-						<p class="hint" role="status">{expenseTags.length} of {MAX_EXPENSE_TAGS} tags selected. {expenseTags.length === MAX_EXPENSE_TAGS ? 'Remove one to choose another.' : 'Choose at least one. Add more tags in More → Settings.'}</p>
+						<ChipGroup
+							label="Spending tags"
+							options={composerTagOptions}
+							multiple
+							values={expenseTags}
+							maxSelected={MAX_EXPENSE_TAGS}
+							disabled={actionBusy}
+							onChange={(tag) => toggleTag('expenses', tag)}
+						/>
+						<div class="tag-add">
+							<input
+								class="input"
+								bind:value={newExpenseTag}
+								maxlength={MAX_TAG_LENGTH}
+								placeholder="New tag, e.g. Hosting"
+								aria-label="New spending tag"
+								disabled={actionBusy}
+								onkeydown={(event) => newTagKeydown(event, 'expenses')}
+							/>
+							<button class="btn btn--outline btn--sm" type="button" disabled={actionBusy || !newExpenseTag.trim()} onclick={() => addInlineTag('expenses')}>Add</button>
+						</div>
+						<p class="hint" role="status">{expenseTags.length} of {MAX_EXPENSE_TAGS} tags selected. {expenseTags.length === MAX_EXPENSE_TAGS ? 'Remove one to choose another.' : 'Type a new tag above to create it as you record.'}</p>
 					</div>
 
 					<div class="field">
