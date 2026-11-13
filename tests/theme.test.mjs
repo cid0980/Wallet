@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { THEME_KEY, chromeColor, isThemePref, manifestHref, resolveTheme } from '../src/lib/stores/theme.ts';
+import { DEFAULT_THEME, THEME_KEY, chromeColor, isThemePref, manifestHref, resolveTheme } from '../src/lib/stores/theme.ts';
 
 test('the storage key stays put, so a choice survives a deploy', () => {
 	assert.equal(THEME_KEY, 'vault.theme');
@@ -36,4 +36,9 @@ test('the system bars take the page background, never the brand green', () => {
 	assert.equal(chromeColor('light'), '#f8fafc');
 	assert.equal(chromeColor('dark'), '#0b1220');
 	assert.ok(![chromeColor('light'), chromeColor('dark')].includes('#0d9488'));
+});
+
+test('a fresh install starts light rather than following the phone', () => {
+	assert.equal(DEFAULT_THEME, 'light');
+	assert.equal(resolveTheme(DEFAULT_THEME), 'light');
 });

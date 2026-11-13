@@ -17,6 +17,13 @@ export type ResolvedTheme = 'light' | 'dark';
 export const THEME_KEY = 'vault.theme';
 
 /**
+ * A fresh install starts light. 'Auto' is still offered in Settings, but the
+ * default is a deliberate choice: the app should look the same the first time
+ * two people open it, whatever their phones are set to.
+ */
+export const DEFAULT_THEME: ThemePref = 'light';
+
+/**
  * The two values the system bars are painted with — always the page background,
  * never the brand green, so the bars read as part of the app.
  *
@@ -46,12 +53,12 @@ function systemQuery(): MediaQueryList | null {
 }
 
 function readStored(): ThemePref {
-	if (typeof window === 'undefined') return 'auto';
+	if (typeof window === 'undefined') return DEFAULT_THEME;
 	try {
 		const value = window.localStorage.getItem(THEME_KEY);
-		return value === 'light' || value === 'dark' || value === 'auto' ? value : 'auto';
+		return isThemePref(value) ? value : DEFAULT_THEME;
 	} catch {
-		return 'auto';
+		return DEFAULT_THEME;
 	}
 }
 

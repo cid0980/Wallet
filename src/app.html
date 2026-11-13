@@ -13,10 +13,10 @@
 		-->
 		<meta name="theme-color" content="#f8fafc" />
 		<script>
-			// Runs before first paint so a dark phone never flashes white, and so the
+			// Runs before first paint so a chosen dark theme never flashes white, and so the
 			// system bars are drawn in the right colour from the first frame.
 			try {
-				var pref = localStorage.getItem('vault.theme') || 'auto';
+				var pref = localStorage.getItem('vault.theme') || 'light';
 				var dark =
 					pref === 'dark' ||
 					(pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);

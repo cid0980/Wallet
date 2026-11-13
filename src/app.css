@@ -29,17 +29,16 @@
 	--line: #e2e8f0;
 	--line-2: #cbd5e1;
 
-	/* One accent: modern teal. Fills carrying white labels sit one step deeper
-	   (#0f766e) so the text clears AA; #0d9488 is the accent for meters, rings
-	   and icons. */
-	--brand: #0f766e;
-	--brand-2: #115e59;
-	--brand-soft: #f0fdfa;
-	--brand-ink: #115e59;
+	/* One accent: royal blue. White on #2563eb clears AA on its own, and the
+	   deeper #1d4ed8 carries hover and text-on-tint. */
+	--brand: #2563eb;
+	--brand-2: #1d4ed8;
+	--brand-soft: #eff6ff;
+	--brand-ink: #1d4ed8;
 
 	/* Status colours are reserved for status: in/out direction, errors, warnings. */
-	--in: #0f766e;
-	--in-soft: #f0fdfa;
+	--in: #1d4ed8;
+	--in-soft: #eff6ff;
 	--out: #b91c1c;
 	--out-soft: #fef2f2;
 
@@ -60,16 +59,16 @@
 	/* Depth comes from borders, not shadows. These stay for focus/overlay only. */
 	--sh-1: none;
 	--sh-2: 0 24px 60px -32px rgb(15 23 42 / 32%);
-	--focus: 0 0 0 3px rgb(13 148 136 / 24%);
+	--focus: 0 0 0 3px rgb(37 99 235 / 24%);
 
 	/* Surfaces that sit on top of other surfaces, and the few places where a
 	   colour cannot be a brand tint (hover wash, success toast, the fab). */
 	--btn-hover: #f1f5f9;
-	--ok-bg: #f0fdfa;
-	--ok-line: #99f6e4;
-	--ok-ink: #115e59;
-	--ok-ink-2: #0f766e;
-	--spinner-track: #ccfbf1;
+	--ok-bg: #eff6ff;
+	--ok-line: #bfdbfe;
+	--ok-ink: #1e40af;
+	--ok-ink-2: #1d4ed8;
+	--spinner-track: #dbeafe;
 	--skeleton-hi: #eef2f7;
 	--danger-icon-bg: #fee2e2;
 	--avatar-b-bg: #e2e8f0;
@@ -77,11 +76,11 @@
 	--fab-bg: #0f172a;
 	--fab-open-bg: #334155;
 	--fab-ink: #ffffff;
-	--glow-a: rgb(13 148 136 / 9%);
+	--glow-a: rgb(37 99 235 / 8%);
 	--glow-b: rgb(15 23 42 / 5%);
-	--chip-ring: rgb(13 148 136 / 35%);
-	--seg-ring: rgb(13 148 136 / 32%);
-	--brand-ring: rgb(13 148 136 / 45%);
+	--chip-ring: rgb(37 99 235 / 35%);
+	--seg-ring: rgb(37 99 235 / 32%);
+	--brand-ring: rgb(37 99 235 / 45%);
 
 	--nav-h: 56px;
 	--gutter: 14px;
@@ -89,8 +88,8 @@
 
 /*
  * Dark is the same palette read at night: the page sinks to near-black, cards
- * lift one step instead of being pure white, and the brand green brightens only
- * where it is ink. Buttons keep a deep green so white labels stay legible.
+ * lift one step instead of being pure white, and the royal blue brightens only
+ * where it is ink. Fills keep the base blue so white labels stay legible.
  */
 :root[data-theme='dark'] {
 	color-scheme: dark;
@@ -106,13 +105,13 @@
 	--line: #1e293b;
 	--line-2: #334155;
 
-	--brand: #0f766e;
-	--brand-2: #115e59;
-	--brand-soft: #0f2b2a;
-	--brand-ink: #5eead4;
+	--brand: #2563eb;
+	--brand-2: #1d4ed8;
+	--brand-soft: #111d3a;
+	--brand-ink: #93c5fd;
 
-	--in: #2dd4bf;
-	--in-soft: #0f2b2a;
+	--in: #93c5fd;
+	--in-soft: #10203c;
 	--out: #fca5a5;
 	--out-soft: #2a1616;
 
@@ -125,14 +124,14 @@
 
 	--sh-1: none;
 	--sh-2: 0 24px 60px -32px rgb(2 6 23 / 72%);
-	--focus: 0 0 0 3px rgb(45 212 191 / 26%);
+	--focus: 0 0 0 3px rgb(96 165 250 / 28%);
 
 	--btn-hover: #1a2436;
-	--ok-bg: #0f2b2a;
-	--ok-line: #134e4a;
-	--ok-ink: #5eead4;
-	--ok-ink-2: #2dd4bf;
-	--spinner-track: #1c3a37;
+	--ok-bg: #10203c;
+	--ok-line: #1e3a8a;
+	--ok-ink: #93c5fd;
+	--ok-ink-2: #60a5fa;
+	--spinner-track: #1e293b;
 	--skeleton-hi: #202c40;
 	--danger-icon-bg: #3a1d1d;
 	--avatar-b-bg: #1e293b;
@@ -140,11 +139,11 @@
 	--fab-bg: #1a2436;
 	--fab-open-bg: #2b3a4f;
 	--fab-ink: #f1f5f9;
-	--glow-a: rgb(13 148 136 / 16%);
-	--glow-b: rgb(37 99 235 / 8%);
-	--chip-ring: rgb(45 212 191 / 38%);
-	--seg-ring: rgb(45 212 191 / 34%);
-	--brand-ring: rgb(45 212 191 / 55%);
+	--glow-a: rgb(37 99 235 / 18%);
+	--glow-b: rgb(37 99 235 / 10%);
+	--chip-ring: rgb(96 165 250 / 40%);
+	--seg-ring: rgb(96 165 250 / 36%);
+	--brand-ring: rgb(96 165 250 / 58%);
 }
 
 *,
@@ -192,7 +191,7 @@ a {
 }
 
 :focus-visible {
-	outline: 3px solid rgb(13 148 136 / 34%);
+	outline: 3px solid rgb(37 99 235 / 34%);
 	outline-offset: 2px;
 }
 
@@ -393,8 +392,8 @@ main:focus {
 
 .btn--primary {
 	border-color: transparent;
-	background: linear-gradient(140deg, #0d9488, var(--brand-2));
-	box-shadow: 0 10px 22px -14px rgb(15 118 110 / 80%);
+	background: linear-gradient(140deg, #2563eb, var(--brand-2));
+	box-shadow: 0 10px 22px -14px rgb(29 78 216 / 80%);
 	color: #fff;
 }
 
@@ -1017,9 +1016,9 @@ main:focus {
 	padding: 24px 22px;
 	border-radius: var(--r-xl);
 	background:
-		radial-gradient(16rem 12rem at 102% -10%, rgb(204 251 241 / 30%), transparent 70%),
-		linear-gradient(140deg, #0d9488, #115e59);
-	box-shadow: 0 22px 44px -26px rgb(17 94 89 / 90%);
+		radial-gradient(16rem 12rem at 102% -10%, rgb(191 219 254 / 30%), transparent 70%),
+		linear-gradient(140deg, #2563eb, #1e40af);
+	box-shadow: 0 22px 44px -26px rgb(30 64 175 / 90%);
 	color: #fff;
 }
 
@@ -1127,8 +1126,8 @@ main:focus {
 	border: 1px solid transparent;
 	border-radius: var(--r-lg);
 	padding: 12px 16px;
-	background: linear-gradient(140deg, #0d9488, #115e59);
-	box-shadow: 0 14px 28px -20px rgb(15 118 110 / 90%);
+	background: linear-gradient(140deg, #2563eb, #1e40af);
+	box-shadow: 0 14px 28px -20px rgb(29 78 216 / 90%);
 	color: #fff;
 	text-align: left;
 	cursor: pointer;
@@ -1752,7 +1751,7 @@ details.raw pre {
 	flex: 0 0 auto;
 	place-items: center;
 	border-radius: 14px;
-	background: linear-gradient(140deg, #0d9488, var(--brand-2));
+	background: linear-gradient(140deg, #2563eb, var(--brand-2));
 	color: #fff;
 	font-size: 1.1rem;
 	font-weight: 850;
@@ -2002,13 +2001,13 @@ code {
 	place-items: center;
 	border: 0;
 	border-radius: 50%;
-	background: rgb(13 148 136 / 14%);
+	background: rgb(37 99 235 / 14%);
 	color: inherit;
 	cursor: pointer;
 }
 
 .chip__x:hover {
-	background: rgb(13 148 136 / 24%);
+	background: rgb(37 99 235 / 24%);
 }
 
 .chip__x[disabled] {
@@ -2087,14 +2086,14 @@ code {
 }
 
 .chip--choice:focus-within {
-	outline: 3px solid rgb(13 148 136 / 34%);
+	outline: 3px solid rgb(37 99 235 / 34%);
 	outline-offset: 2px;
 }
 
 .chip--choice:has(input:checked) {
 	border-color: transparent;
 	background: var(--brand-soft);
-	box-shadow: inset 0 0 0 1.5px rgb(13 148 136 / 35%);
+	box-shadow: inset 0 0 0 1.5px rgb(37 99 235 / 35%);
 	color: var(--brand-ink);
 }
 
@@ -2234,7 +2233,7 @@ code {
  *
  * Rules this section enforces:
  *  - depth comes from 1px borders on white surfaces, never from drop shadows;
- *  - the brand green is used for exactly one action per screen;
+ *  - the brand blue is used for exactly one action per screen;
  *  - status colours (red/green/amber) only ever describe status;
  *  - one radius scale, one gutter, one page rhythm on every screen;
  *  - mobile stacks to a single column with a sticky nav bar; desktop adds a
@@ -4042,7 +4041,7 @@ body {
 	border-color: var(--brand);
 	background: var(--brand-soft);
 	color: var(--brand);
-	box-shadow: 0 0 0 4px rgb(13 148 136 / 16%);
+	box-shadow: 0 0 0 4px rgb(37 99 235 / 16%);
 }
 
 /* The gesture needs raw pointer moves, so the browser must not pan first. */
